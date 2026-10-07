@@ -34,8 +34,14 @@ h1{font-size:1.2rem;margin:0 0 .8rem;letter-spacing:.1em}
 .fig .bone{stroke:var(--ink);stroke-width:10;stroke-linecap:round;fill:none}
 .fig .far{stroke:#A8A093}.fig .headc{fill:var(--ink)}.fig .ground{stroke:var(--rule);stroke-width:2}
 .fig .h{fill:#fff;stroke:var(--acc);stroke-width:2.5;cursor:grab}.fig .h.root{stroke:#B3283C}
-.fig .pbox{fill:#D9D0BE;stroke:#C9BFAB;stroke-width:.8}.fig .gplane{fill:#EFEBE2;stroke:none}.fig .h.small{stroke:#8A6FB0}
-.cam .camr{display:flex;align-items:center;gap:.3rem;font-size:.76rem;color:var(--sub)}.cam .camr input{width:6rem}.fig .ph{fill:#E8A23A;stroke:#fff;stroke-width:1.5;cursor:move}.fig .pin{fill:none;stroke:#B3283C;stroke-width:2.5;stroke-dasharray:3 2}
+.fig .eye{fill:#fff}.fig .h.hd{fill:transparent}.fig .knobl{stroke:#8A6FB0;stroke-width:1.2;stroke-dasharray:3 3}.fig .pbox{fill:#D9D0BE;stroke:#C9BFAB;stroke-width:.8}.fig .gplane{fill:#EFEBE2;stroke:none}.fig .h.small{stroke:#8A6FB0}
+.camr{display:flex;align-items:center;gap:.4rem;font-size:.78rem;color:var(--sub);margin-top:.35rem}.camr input{flex:1}
+.wrap:has(.mv-ed){max-width:1120px}
+.mv-ed{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(16rem,1fr);gap:1rem;align-items:start}
+.mv-stagecol{position:sticky;top:.5rem}
+.mv-ctlcol .ctl-sec{border:1px solid var(--rule);border-radius:6px;background:#fff;padding:.5rem .65rem;margin-bottom:.55rem}
+.mv-ctlcol .ctl-h{font-size:.76rem;font-weight:700;color:var(--sub);margin-bottom:.3rem}
+@media (max-width:720px){.mv-ed{grid-template-columns:1fr}.mv-stagecol{top:0;z-index:2;background:var(--paper);padding-bottom:.3rem}.mv-stagecol .fig{max-height:46vh}}.fig .ph{fill:#E8A23A;stroke:#fff;stroke-width:1.5;cursor:move}.fig .pin{fill:none;stroke:#B3283C;stroke-width:2.5;stroke-dasharray:3 2}
 .mlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(9.5rem,1fr));gap:.5rem}
 .mcard{border:1px solid var(--rule);border-radius:8px;background:#fff;padding:.3rem;cursor:pointer;text-align:center}
 .mcard svg{width:100%;height:auto;background:none;border:none}.mcard b{font-size:.84rem;display:block}.mcard small{color:var(--sub);font-size:.72rem}
@@ -93,7 +99,7 @@ nav.tabs button[aria-selected="true"]{color:var(--ink);box-shadow:inset 0 3px 0 
 <script>
 (function(){
 "use strict";
-const APP_VERSION = "2026-10-07 r3";
+const APP_VERSION = "2026-10-07 r5";
 const DATA = "roadmap/apps/tanren/data.json";
 const KEY_CONN = "tn-conn", KEY_CACHE = "tn-cache", KEY_VOICE = "tn-voice";
 const state = { conn: null, doc: null, sha: null, view: "menus", editMenu: null, picker: false, editMove: null, frame: 0, preview: true, play: null };
@@ -162,12 +168,31 @@ function ikTo(p, key, T){
   q.d[L[1]] = v3.norm(v3.sub(mid, Rt)); q.d[L[2]] = v3.norm(v3.sub(T, mid));
   return q;
 }
+// どの関節をいくつ固定しても合うように:骨の長さを保ったまま、固定した関節を決めた場所へ少しずつ寄せる
+const EXTRA = [["L1", "L2", SEG.sh * 2], ["Q1", "Q2", SEG.hip * 2]];       // 肩の線・腰の線はまっすぐのまま
+function solvePins(q, pins){
+  const pos = joints(q), fixed = new Set(Object.keys(pins));
+  Object.keys(pins).forEach(k => { pos[k] = pins[k].slice(); });
+  const cons = BONES.map(([b, par, l]) => [par, b, l]).concat(EXTRA);
+  for (let it = 0; it < 80; it++) {
+    for (const [a, b, l] of cons) {
+      const wa = fixed.has(a) ? 0 : 1, wb = fixed.has(b) ? 0 : 1; if (!wa && !wb) continue;
+      const dv = v3.sub(pos[b], pos[a]), dist = v3.len(dv) || 1e-6, k = (dist - l) / dist;
+      pos[a] = v3.add(pos[a], v3.mul(dv, k * wa / (wa + wb))); pos[b] = v3.sub(pos[b], v3.mul(dv, k * wb / (wa + wb)));
+    }
+  }
+  const o = clone(q); o.r = pos.P.slice();
+  for (const [b, par] of BONES) { const dv = v3.sub(pos[b], pos[par]); if (v3.len(dv) > 1e-6) o.d[b] = v3.norm(dv); }
+  return o;
+}
 function place(p, move){
   const pins = move.pins || {}, keys = Object.keys(pins);
   if (!keys.length) return plant(p, move.plant);
   let q = clone(p); const j = joints(q);
-  q.r = v3.add(q.r, v3.sub(pins[keys[0]], j[keys[0]]));
-  keys.slice(1).forEach(k => { q = ikTo(q, k, pins[k]); });
+  q.r = v3.add(q.r, v3.sub(pins[keys[0]], j[keys[0]]));                    // 1つ目の固定に合わせて体全体をずらす
+  const rest = keys.slice(1);
+  if (rest.some(k => !LIMB[k])) q = solvePins(q, pins);                       // 手首・足首以外も固定しているとき
+  rest.filter(k => LIMB[k]).forEach(k => { q = ikTo(q, k, pins[k]); });     // 手首・足首は最後にぴったり届かせる
   return q;
 }
 // 置く物(立体の箱の集まりとして描く)
@@ -196,7 +221,24 @@ function boxSvg(b, cam, cls){
 const propSvg = (o, cam) => '<g class="prop">' + propBoxes(o).map(b => boxSvg(b, cam, "pbox")).join("") + "</g>";
 function propAnchor(o){ return [o.x, o.type === "wall" ? 100 : o.type === "mat" ? 2 : o.y, o.z || 0]; }
 const HANDLES = ["P", "M", "S", "H", "E1", "W1", "E2", "W2", "K1", "A1", "K2", "A2", "T1", "T2", "L1", "L2", "Q1", "Q2"];
-const SHOWN = ["P", "M", "S", "H", "L1", "L2", "Q1", "Q2", "E1", "W1", "E2", "W2", "K1", "A1", "K2", "A2", "T1", "T2"];
+const SHOWN = ["P", "M", "S", "H", "L2", "Q2", "E1", "W1", "E2", "W2", "K1", "A1", "K2", "A2", "T1", "T2"];      // 肩・腰の線のつまみは片側だけ(反対側も一緒に回る)
+const KNOB = 26;     // 肩・股の線を回すつまみは、付け根からこの長さの所に出す
+const knobPos = (p, j, k) => /^[LQ]/.test(k) ? v3.add(j[BONE[k][1]], v3.mul(p.d[k], KNOB)) : j[k];
+// 前を向いているか後ろかが分かるように、頭に目を描く(1=右半身。前 = 上向き × 右)
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+function facing(p){
+  const up = p.d.H, rt = p.d.L1;
+  let f = cross(up, rt); if (v3.len(f) < 0.2) f = cross(v3.norm(v3.add(p.d.M, p.d.S)), rt);
+  return { f: v3.norm(f), up: v3.norm(up), rt: v3.norm(v3.sub(rt, v3.mul(v3.norm(up), v3.dot(rt, v3.norm(up))))) };
+}
+function eyesSvg(p, j, cam){
+  const fc = facing(p), r = SEG.head, c0 = toCam(j.H, cam);
+  return [1, -1].map(sd => {
+    const e = v3.add(j.H, v3.add(v3.mul(fc.f, r * 0.62), v3.add(v3.mul(fc.rt, sd * r * 0.42), v3.mul(fc.up, r * 0.12))));
+    const ec = toCam(e, cam); if (ec[2] <= c0[2] + 0.5) return "";
+    const q = scr(e, cam); return '<circle class="eye" cx="' + q[0].toFixed(1) + '" cy="' + q[1].toFixed(1) + '" r="2.4"/>';
+  }).join("");
+}
 function figureSvg(p, cam, opts){
   opts = opts || {}; cam = camOf(cam);
   const j = joints(p), s = {}; for (const k in j) s[k] = scr(j[k], cam);
@@ -211,7 +253,7 @@ function figureSvg(p, cam, opts){
   items.push({ head: true, dep: s.H[2] });
   items.sort((x, y) => x.dep - y.dep);
   for (const it of items) {
-    if (it.head) { h += '<circle class="headc" cx="' + s.H[0].toFixed(1) + '" cy="' + s.H[1].toFixed(1) + '" r="' + SEG.head + '"/>'; continue; }
+    if (it.head) { h += '<circle class="headc" cx="' + s.H[0].toFixed(1) + '" cy="' + s.H[1].toFixed(1) + '" r="' + SEG.head + '"/>' + eyesSvg(p, j, cam); continue; }
     if (it.b === "H") continue;
     const far = it.dep < mid - 4 ? " far" : "";
     h += '<line class="bone' + far + '" x1="' + it.a[0].toFixed(1) + '" y1="' + it.a[1].toFixed(1) + '" x2="' + it.z[0].toFixed(1) + '" y2="' + it.z[1].toFixed(1) + '"/>';
@@ -220,8 +262,10 @@ function figureSvg(p, cam, opts){
   if (opts.handles) {
     const pins = opts.pins || {};
     h += (opts.props || []).map((o, i) => { const a = scr(propAnchor(o), cam); return '<rect class="ph" data-prop="' + i + '" x="' + (a[0] - 6).toFixed(1) + '" y="' + (a[1] - 6).toFixed(1) + '" width="12" height="12" transform="rotate(45 ' + a[0].toFixed(1) + " " + a[1].toFixed(1) + ')"/>'; }).join("");
-    h += SHOWN.slice().sort((a, b) => s[a][2] - s[b][2]).map(k => { const v = s[k]; return (pins[k] ? '<rect class="pin" x="' + (v[0] - 10).toFixed(1) + '" y="' + (v[1] - 10).toFixed(1) + '" width="20" height="20" rx="3"/>' : "") +
-      '<circle class="h' + (k === "P" ? " root" : /^[LQ]/.test(k) ? " small" : "") + '" data-j="' + k + '" cx="' + v[0].toFixed(1) + '" cy="' + v[1].toFixed(1) + '" r="' + (k === "P" ? 9 : /^[LQ]/.test(k) ? 5 : 7) + '"/>'; }).join("");
+    const hp = {}; SHOWN.forEach(k => { hp[k] = scr(knobPos(p, j, k), cam); });
+    h += ["L2", "Q2"].map(k => { const b = s[BONE[k][1]]; return '<line class="knobl" x1="' + b[0].toFixed(1) + '" y1="' + b[1].toFixed(1) + '" x2="' + hp[k][0].toFixed(1) + '" y2="' + hp[k][1].toFixed(1) + '"/>'; }).join("");
+    h += SHOWN.slice().sort((a, b) => hp[a][2] - hp[b][2]).map(k => { const v = hp[k]; return (pins[k] ? '<rect class="pin" x="' + (v[0] - 10).toFixed(1) + '" y="' + (v[1] - 10).toFixed(1) + '" width="20" height="20" rx="3"/>' : "") +
+      '<circle class="h' + (k === "P" ? " root" : /^[LQ]/.test(k) ? " small" : k === "H" ? " hd" : "") + '" data-j="' + k + '" cx="' + v[0].toFixed(1) + '" cy="' + v[1].toFixed(1) + '" r="' + (k === "P" ? 9 : /^[LQ]/.test(k) ? 5 : 7) + '"/>'; }).join("");
   }
   return h + "</svg>";
 }
@@ -266,6 +310,14 @@ function prop2to3(o){
   if (o.type === "wall") return { type: "wall", x, y: 0, z: 0, w: o.w || 10 };
   return { type: o.type, x, y, z: 0, w: o.w || 50, h: o.h || 40, d: 44 };
 }
+// 新しく作るときの立ち姿(前 = x、右半身 = 手前 z)
+function standPose(armsFwd){
+  const p = { r: [0, 0, 0], lift: 0, d: { M: [0, 1, 0], S: [0, 1, 0], H: [0, 1, 0], L1: [0, 0, 1], L2: [0, 0, -1], Q1: [0, 0, 1], Q2: [0, 0, -1],
+    E1: v3.norm(armsFwd ? [1, -0.1, 0.3] : [0.05, -1, 0.78]), W1: v3.norm(armsFwd ? [1, 0.05, 0.12] : [0.3, -1, 0.42]),
+    E2: v3.norm(armsFwd ? [1, -0.1, -0.3] : [0.05, -1, -0.78]), W2: v3.norm(armsFwd ? [1, 0.05, -0.12] : [0.3, -1, -0.42]),
+    K1: v3.norm([0, -1, 0.2]), A1: v3.norm([0, -1, 0.05]), T1: v3.norm([0.95, 0, 0.32]), K2: v3.norm([0, -1, -0.2]), A2: v3.norm([0, -1, -0.05]), T2: v3.norm([0.95, 0, -0.32]) } };
+  return plant(p, {});
+}
 function to3D(m){
   if (m.v3) return m;
   const o = Object.assign({}, m, { v3: true, cam: camOf(m.cam) });
@@ -303,12 +355,13 @@ const BUILTIN2D = [
 ];
 // クラムシェル:横向きに寝て、ひざを曲げ、両足をそろえたまま上のひざを開く(腰と上の足首を固定)
 const CLAM = (() => {
-  const base = { r: [0, 10, 0], d: { M: [-1, 0, 0], S: [-1, 0, 0], H: v3.norm([-1, 0.08, 0]), L1: [0, 1, 0], E1: v3.norm([0.2, -0.35, 0.92]), W1: v3.norm([0.1, -0.85, 0.5]),
-    L2: [0, -1, 0], E2: [-1, 0, 0], W2: [-1, 0, 0], Q1: [0, 1, 0], K1: v3.norm([0.7, -0.2, 0.7]), A1: v3.norm([0.7, -0.05, -0.7]), T1: v3.norm([0.4, 0, -0.9]),
-    Q2: [0, -1, 0], K2: v3.norm([0.707, 0, 0.707]), A2: v3.norm([0.707, 0, -0.707]), T2: v3.norm([0.4, 0, -0.9]) } };
+  const base = { r: [0, 10, 0], d: { M: [-1, 0, 0], S: [-1, 0, 0], H: v3.norm([-1, 0.08, 0]),
+    L1: [0, -1, 0], E1: [-1, 0, 0], W1: [-1, 0, 0], L2: [0, 1, 0], E2: v3.norm([0.2, -0.35, 0.92]), W2: v3.norm([0.1, -0.85, 0.5]),
+    Q1: [0, -1, 0], K1: v3.norm([0.707, 0, 0.707]), A1: v3.norm([0.707, 0, -0.707]), T1: v3.norm([0.4, 0, -0.9]),
+    Q2: [0, 1, 0], K2: v3.norm([0.7, -0.2, 0.7]), A2: v3.norm([0.7, -0.05, -0.7]), T2: v3.norm([0.4, 0, -0.9]) } };
   const rest = plant(base, { mode: "lowest" }), j = joints(rest);
-  const open = clone(rest); open.d.K1 = v3.norm([0.5, 0.75, 0.45]);
-  return { id: "b:clam", name: "クラムシェル", v3: true, sec: 3, cam: { yaw: 0, pitch: 18 }, pins: { P: j.P, A1: j.A1 }, props: [{ type: "mat", x: -110, y: 0, z: 0, w: 220, d: 90 }], frames: [rest, open] };
+  const open = clone(rest); open.d.K2 = v3.norm([0.5, 0.75, 0.45]);
+  return { id: "b:clam", name: "クラムシェル", v3: true, sec: 3, cam: { yaw: 0, pitch: 18 }, pins: { P: j.P, A2: j.A2 }, props: [{ type: "mat", x: -110, y: 0, z: 0, w: 220, d: 90 }], frames: [rest, open] };
 })();
 const BUILTIN = BUILTIN2D.map(to3D).concat([CLAM]);
 const D = () => state.doc;
@@ -405,29 +458,32 @@ function renderMoves(){
     '<div class="panel"><div class="panel-h"><span>用意した動作</span></div><div class="panel-b"><div class="mlist">' + BUILTIN.map(card).join("") + "</div></div></div>";
 }
 function moveEditorHtml(m){
-  const builtin = m.id && m.id.startsWith("b:");
-  const fr = m.frames[state.frame] || m.frames[0];
-  return "<h1>" + (builtin ? esc(m.name) : "動作を作る") + "</h1>" +
-    (builtin ? '<p class="empty">用意した動作は直せません。「これをもとに作る」で自分の動作として直せます。</p>' :
-      '<div class="grid2"><div class="f"><label>名前</label><input id="mv-name" value="' + esc(m.name) + '" placeholder="お尻のストレッチ"></div>' +
-
-      '<div class="f"><label>1回にかける秒</label><input id="mv-sec" type="number" min="0.5" step="0.1" value="' + m.sec + '"></div>' +
-      '<div class="f"><label>地面へのつけ方(固定が無いとき)</label><select id="mv-plant"><option value="feet"' + ((m.plant || {}).mode !== "lowest" ? " selected" : "") + '>足を地面に</option><option value="lowest"' + ((m.plant || {}).mode === "lowest" ? " selected" : "") + ">体の一番低いところを地面に(寝る・座る)</option></select></div></div>") +
-    (() => { const c = camOf(m.cam); return '<div class="row cam" style="margin:.5rem 0"><span class="status">カメラ</span>' +
-      [["正面", 0, 0], ["横から", 90, 0], ["上から", 0, 80], ["斜め", -35, 25]].map(([l, y, p]) => '<button type="button" class="chip-b" data-cam="' + y + ":" + p + '" aria-pressed="' + (c.yaw === y && c.pitch === p) + '">' + l + "</button>").join("") +
-      '<label class="camr">回す<input type="range" id="cam-yaw" min="-180" max="180" step="5" value="' + c.yaw + '"></label><label class="camr">見下ろす<input type="range" id="cam-pitch" min="0" max="85" step="5" value="' + c.pitch + '"></label></div>'; })() +
-    '<div class="row" style="margin:.5rem 0"><span class="status">ポーズ</span>' + m.frames.map((f, i) => '<button type="button" class="chip-b" data-frame="' + i + '" aria-pressed="' + (i === state.frame && !state.preview) + '">' + (i + 1) + "</button>").join("") +
-      (builtin ? "" : '<button type="button" class="chip-b" data-fadd>+ この形を写して足す</button>' + (m.frames.length > 1 ? '<button type="button" class="chip-b" data-fdel>このポーズを消す</button>' : "")) +
+  const builtin = m.id && m.id.startsWith("b:"), c = camOf(m.cam);
+  const sec = (t, body) => '<div class="ctl-sec"><div class="ctl-h">' + t + "</div>" + body + "</div>";
+  // 左:人形(画面に張りつく)。右:操作
+  const stage = '<div class="mv-stagecol"><div id="mv-stage">' + editStage(m) + "</div>" +
+    (builtin || state.preview ? "" : '<p class="empty" style="font-size:.76rem;margin:.3rem 0 0">' + (state.pinMode ? "固定したい関節の丸を押してください。いくつでも、どの関節でも固定できます(もう一度押すと外れます)。1つ目には体全体をずらして合わせ、2つ目からは骨の長さを保ったまま体を動かして合わせます。"
+      : "関節の丸をドラッグ。赤い丸(腰)で全体を、紫の小さな丸で肩・腰の線(ひねり)を動かします。白い目がある側が顔の前です。") + "</p>") + "</div>";
+  const ctl = '<div class="mv-ctlcol">' +
+    (builtin ? '<p class="empty" style="margin-top:0">用意した動作は直せません。「これをもとに作る」で自分の動作として直せます。</p>'
+      : sec("動作", '<div class="f"><label>名前</label><input id="mv-name" value="' + esc(m.name) + '" placeholder="お尻のストレッチ"></div>' +
+        '<div class="grid2" style="margin-top:.3rem"><div class="f"><label>1回にかける秒</label><input id="mv-sec" type="number" min="0.5" step="0.1" value="' + m.sec + '"></div>' +
+        '<div class="f"><label>地面へのつけ方(固定が無いとき)</label><select id="mv-plant"><option value="feet"' + ((m.plant || {}).mode !== "lowest" ? " selected" : "") + '>足を地面に</option><option value="lowest"' + ((m.plant || {}).mode === "lowest" ? " selected" : "") + ">体の一番低いところを地面に(寝る・座る)</option></select></div></div>")) +
+    sec("ポーズ", '<div class="chips">' + m.frames.map((f, i) => '<button type="button" class="chip-b" data-frame="' + i + '" aria-pressed="' + (i === state.frame && !state.preview) + '">' + (i + 1) + "</button>").join("") +
       '<button type="button" class="chip-b" data-preview aria-pressed="' + state.preview + '">▶ 通して見る</button></div>' +
-    (builtin || state.preview ? "" : '<div class="row" style="margin:.2rem 0 .4rem"><button type="button" class="chip-b" data-pinmode aria-pressed="' + !!state.pinMode + '">📌 固定する関節を選ぶ</button>' +
-      '<select id="mv-prop-type"><option value="">物を置く…</option>' + Object.entries(PROPS).map(([k, v]) => '<option value="' + k + '">' + v + "</option>").join("") + "</select>" +
-      (m.props || []).map((o, i) => '<span class="chip-b">' + PROPS[o.type] + ' <button type="button" class="linkbtn" data-prop-del="' + i + '" aria-label="外す">✕</button></span>').join("") + "</div>") +
-    '<div id="mv-stage">' + editStage(m) + "</div>" +
-    (builtin || state.preview ? "" : '<p class="empty" style="font-size:.78rem">' + (state.pinMode ? "固定したい関節の丸を押してください(もう一度押すと外れます)。1つ目は体全体をずらして合わせ、2つ目からの手首・足首は腕や脚を曲げて届かせます。"
-      : "関節の丸をドラッグして形を作ります。赤い丸(腰)で全体を動かせます。📌の四角が付いた関節は、どのポーズでもその場所から動きません(ドラッグすると固定する場所が動きます)。ひし形は置いた物で、ドラッグで動かせます。") + "</p>") +
-    '<div class="row" style="margin-top:.6rem">' + (builtin ? '<button type="button" class="btn" data-mvcopy>これをもとに作る</button>' : '<button type="button" class="btn" data-mvsave>保存</button>') +
-      '<button type="button" class="btn ghost" data-mvclose>閉じる</button>' + (!builtin && (D().moves || []).some(x => x.id === m.id) ? '<button type="button" class="linkbtn" data-mvdel style="margin-left:auto;color:#B3283C">この動作を消す</button>' : "") + "</div>";
+      (builtin ? "" : '<div class="chips" style="margin-top:.3rem"><button type="button" class="chip-b" data-fadd>+ この形を写して足す</button>' + (m.frames.length > 1 ? '<button type="button" class="chip-b" data-fdel>このポーズを消す</button>' : "") + "</div>")) +
+    sec("カメラ", '<div class="chips cam">' + [["正面", 0, 0], ["横から", 90, 0], ["上から", 0, 80], ["斜め", -35, 25]].map(([l, y, p]) => '<button type="button" class="chip-b" data-cam="' + y + ":" + p + '" aria-pressed="' + (c.yaw === y && c.pitch === p) + '">' + l + "</button>").join("") + "</div>" +
+      '<label class="camr">回す<input type="range" id="cam-yaw" min="-180" max="180" step="5" value="' + c.yaw + '"></label><label class="camr">見下ろす<input type="range" id="cam-pitch" min="0" max="85" step="5" value="' + c.pitch + '"></label>') +
+    (builtin || state.preview ? "" : sec("固定と物", '<button type="button" class="chip-b" data-pinmode aria-pressed="' + !!state.pinMode + '">📌 固定する関節を選ぶ</button>' +
+      (Object.keys(m.pins || {}).length ? '<div class="empty" style="font-size:.76rem;margin-top:.2rem">固定:' + Object.keys(m.pins).map(k => JNAME[k] || k).join("・") + "</div>" : "") +
+      '<div style="margin-top:.4rem"><select id="mv-prop-type"><option value="">物を置く…</option>' + Object.entries(PROPS).map(([k, v]) => '<option value="' + k + '">' + v + "</option>").join("") + "</select></div>" +
+      ((m.props || []).length ? '<div class="chips" style="margin-top:.3rem">' + m.props.map((o, i) => '<span class="chip-b">' + PROPS[o.type] + ' <button type="button" class="linkbtn" data-prop-del="' + i + '" aria-label="外す">✕</button></span>').join("") + "</div>" : ""))) +
+    '<div class="row" style="margin-top:.7rem">' + (builtin ? '<button type="button" class="btn" data-mvcopy>これをもとに作る</button>' : '<button type="button" class="btn" data-mvsave>保存</button>') +
+      '<button type="button" class="btn ghost" data-mvclose>閉じる</button></div>' +
+    (!builtin && (D().moves || []).some(x => x.id === m.id) ? '<div style="margin-top:.6rem"><button type="button" class="linkbtn" data-mvdel style="color:#B3283C">この動作を消す</button></div>' : "") + "</div>";
+  return "<h1>" + (builtin ? esc(m.name) : "動作を作る") + '</h1><div class="mv-ed">' + stage + ctl + "</div>";
 }
+const JNAME = { P: "腰", M: "腰の上", S: "胸", H: "頭", L1: "右肩", L2: "左肩", Q1: "右股", Q2: "左股", E1: "右ひじ", W1: "右手首", E2: "左ひじ", W2: "左手首", K1: "右ひざ", A1: "右足首", K2: "左ひざ", A2: "左足首", T1: "右つま先", T2: "左つま先" };
 
 /* ───────── 再生 ───────── */
 function buildSegs(mn){
@@ -513,7 +569,7 @@ function dragTo(jk, pt){
   const sc = w => { const c = toCam(w, cam); return [W / 2 + c[0], groundY(cam) - c[1], c[2]]; };
   if (m.pins && m.pins[jk]) { const c = toCam(m.pins[jk], cam), s0 = sc(m.pins[jk]); m.pins[jk] = fromCam([c[0] + pt[0] - s0[0], c[1] - (pt[1] - s0[1]), c[2]], cam); return; }   // 固定した関節は、固定する場所が動く
   if (jk === "P") { const s0 = sc(j.P); fr.r = v3.add(fr.r, fromCam([pt[0] - s0[0], -(pt[1] - s0[1]), 0], cam)); return; }
-  const [, par, len] = BONE[jk], pc = sc(j[par]), cc = sc(j[jk]);
+  const [, par] = BONE[jk], knob = /^[LQ]/.test(jk), len = knob ? KNOB : BONE[jk][2], pc = sc(j[par]), cc = sc(knob ? knobPos(place(fr, m), j, jk) : j[jk]);
   let dx = pt[0] - pc[0], dup = -(pt[1] - pc[1]), dz;
   const r2 = dx * dx + dup * dup;
   if (r2 >= len * len) { const k = len / Math.sqrt(r2); dx *= k; dup *= k; dz = 0; }
@@ -525,7 +581,7 @@ function togglePin(jk){
   const m = state.editMove, j = joints(place(m.frames[state.frame], m));
   m.pins = Object.assign({}, m.pins || {});
   if (m.pins[jk]) delete m.pins[jk];
-  else { if (Object.keys(m.pins).length && !LIMB[jk]) return say("2つ目からは、手首か足首だけ固定できます(腕・脚を曲げて届かせます)。", true); m.pins[jk] = j[jk].map(x => Math.round(x * 10) / 10); }
+  else m.pins[jk] = j[jk].map(x => Math.round(x * 10) / 10);
   say("");
 }
 function editStage(m){
@@ -584,7 +640,7 @@ function bind(){
   document.getElementById("moves").addEventListener("click", async e => {
     const q = s => e.target.closest(s); let b;
     if ((b = q("[data-mopen]"))) { state.editMove = clone(moveOf(b.dataset.mopen)); state.frame = 0; state.preview = true; return renderMoves(); }
-    if (q("[data-mvnew]")) { state.editMove = { id: "c:" + uid(), name: "", v3: true, cam: { yaw: 0, pitch: 0 }, sec: 2.5, plant: {}, frames: [pose2to3(ST, "side"), pose2to3(Object.assign(clone(ST), { d1: 90, e1: 90, d2: 90, e2: 90 }), "side")] }; state.frame = 0; state.preview = false; return renderMoves(); }
+    if (q("[data-mvnew]")) { state.editMove = { id: "c:" + uid(), name: "", v3: true, cam: { yaw: 0, pitch: 0 }, sec: 2.5, plant: {}, frames: [standPose(false), standPose(true)] }; state.editMove.cam = { yaw: -50, pitch: 12 }; state.frame = 0; state.preview = false; return renderMoves(); }
     const m = state.editMove; if (!m) return;
     readMove(m);
     if (q("[data-mvclose]")) { state.editMove = null; return renderMoves(); }
