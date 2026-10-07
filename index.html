@@ -99,7 +99,7 @@ nav.tabs button[aria-selected="true"]{color:var(--ink);box-shadow:inset 0 3px 0 
 <script>
 (function(){
 "use strict";
-const APP_VERSION = "2026-10-07 r5";
+const APP_VERSION = "2026-10-07 r6";
 const DATA = "roadmap/apps/tanren/data.json";
 const KEY_CONN = "tn-conn", KEY_CACHE = "tn-cache", KEY_VOICE = "tn-voice";
 const state = { conn: null, doc: null, sha: null, view: "menus", editMenu: null, picker: false, editMove: null, frame: 0, preview: true, play: null };
@@ -452,7 +452,7 @@ function renderMoves(){
   const box = document.getElementById("moves");
   if (state.editMove) { box.innerHTML = moveEditorHtml(state.editMove); return; }
   const mine = (D() ? D().moves : []).filter(m => !m.deleted);
-  const card = m => '<button type="button" class="mcard" data-mopen="' + esc(m.id) + '">' + mini(m) + "<b>" + esc(m.name) + "</b><small>1回 " + m.sec + "秒</small></button>";
+  const card = m => '<button type="button" class="mcard" data-mopen="' + esc(m.id) + '">' + mini(m) + "<b>" + esc(m.name) + "</b><small>1回 " + m.sec + "秒" + (m.id.startsWith("c:") ? "・押して直す" : "") + "</small></button>";
   box.innerHTML = "<h1>動作</h1>" + '<div class="panel"><div class="panel-h"><span>自分で作った動作</span><button type="button" class="linkbtn" data-mvnew>+ 新しく作る</button></div><div class="panel-b">' +
     (mine.length ? '<div class="mlist">' + mine.map(card).join("") + "</div>" : '<div class="empty">まだありません。用意した動作を押して「これをもとに作る」からも作れます。</div>') + "</div></div>" +
     '<div class="panel"><div class="panel-h"><span>用意した動作</span></div><div class="panel-b"><div class="mlist">' + BUILTIN.map(card).join("") + "</div></div></div>";
@@ -481,7 +481,8 @@ function moveEditorHtml(m){
     '<div class="row" style="margin-top:.7rem">' + (builtin ? '<button type="button" class="btn" data-mvcopy>これをもとに作る</button>' : '<button type="button" class="btn" data-mvsave>保存</button>') +
       '<button type="button" class="btn ghost" data-mvclose>閉じる</button></div>' +
     (!builtin && (D().moves || []).some(x => x.id === m.id) ? '<div style="margin-top:.6rem"><button type="button" class="linkbtn" data-mvdel style="color:#B3283C">この動作を消す</button></div>' : "") + "</div>";
-  return "<h1>" + (builtin ? esc(m.name) : "動作を作る") + '</h1><div class="mv-ed">' + stage + ctl + "</div>";
+  const saved = !builtin && (D().moves || []).some(x => x.id === m.id && !x.deleted);
+  return "<h1>" + (builtin ? esc(m.name) : saved ? "動作を直す" : "動作を作る") + '</h1><div class="mv-ed">' + stage + ctl + "</div>";
 }
 const JNAME = { P: "腰", M: "腰の上", S: "胸", H: "頭", L1: "右肩", L2: "左肩", Q1: "右股", Q2: "左股", E1: "右ひじ", W1: "右手首", E2: "左ひじ", W2: "左手首", K1: "右ひざ", A1: "右足首", K2: "左ひざ", A2: "左足首", T1: "右つま先", T2: "左つま先" };
 
@@ -639,7 +640,9 @@ function bind(){
   document.getElementById("menus").addEventListener("change", e => { if (state.editMenu && e.target.closest("[data-it]")) { readMenu(state.editMenu); renderMenus(); } });
   document.getElementById("moves").addEventListener("click", async e => {
     const q = s => e.target.closest(s); let b;
-    if ((b = q("[data-mopen]"))) { state.editMove = clone(moveOf(b.dataset.mopen)); state.frame = 0; state.preview = true; return renderMoves(); }
+    if ((b = q("[data-mopen]"))) { const id = b.dataset.mopen; state.editMove = clone(moveOf(id)); state.frame = 0; state.pinMode = false;
+      state.preview = id.startsWith("b:");            // 用意した動作は通して見せる。自分の動作は、すぐ直せる状態で開く
+      return renderMoves(); }
     if (q("[data-mvnew]")) { state.editMove = { id: "c:" + uid(), name: "", v3: true, cam: { yaw: 0, pitch: 0 }, sec: 2.5, plant: {}, frames: [standPose(false), standPose(true)] }; state.editMove.cam = { yaw: -50, pitch: 12 }; state.frame = 0; state.preview = false; return renderMoves(); }
     const m = state.editMove; if (!m) return;
     readMove(m);
@@ -655,7 +658,9 @@ function bind(){
     if (q("[data-mvdel]")) { if (!confirm("この動作を消しますか。")) return; const id = m.id; state.editMove = null; return commit(doc => { doc.moves.find(x => x.id === id).deleted = today(); }); }
     if (q("[data-mvsave]")) {
       if (!m.name) return say("名前を入れてください。", true);
-      const keep = clone(m); state.editMove = null; say("保存しました");
+      const keep = clone(m); delete keep.__fit; const was = (D().moves || []).some(x => x.id === keep.id);
+      const used = (D().menus || []).filter(mn => !mn.deleted && mn.items.some(it => it.move === keep.id)).length;
+      state.editMove = null; say(was ? "直しました" + (used ? "(この動作を使っている " + used + " つのメニューにも反映されます)" : "") : "保存しました");
       return commit(doc => { const i = doc.moves.findIndex(x => x.id === keep.id); if (i >= 0) doc.moves[i] = keep; else doc.moves.push(keep); });
     }
   });
