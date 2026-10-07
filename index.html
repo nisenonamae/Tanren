@@ -34,7 +34,7 @@ h1{font-size:1.2rem;margin:0 0 .8rem;letter-spacing:.1em}
 .fig .bone{stroke:var(--ink);stroke-width:10;stroke-linecap:round;fill:none}
 .fig .far{stroke:#A8A093}.fig .headc{fill:var(--ink)}.fig .ground{stroke:var(--rule);stroke-width:2}
 .fig .h{fill:#fff;stroke:var(--acc);stroke-width:2.5;cursor:grab}.fig .h.root{stroke:#B3283C}
-.fig .eye{fill:#fff}.fig .h.hd{fill:transparent}.fig .knobl{stroke:#8A6FB0;stroke-width:1.2;stroke-dasharray:3 3}.fig .pbox{fill:#D9D0BE;stroke:#C9BFAB;stroke-width:.8}.fig .gplane{fill:#EFEBE2;stroke:none}.fig .h.small{stroke:#8A6FB0}
+.fig .eye{fill:#fff}.tline{display:flex;flex-wrap:wrap;align-items:center;gap:.2rem}.tline .tarrow{font-size:.72rem;color:var(--sub)}.tline .endb{font-size:.7rem;padding:.05rem .45rem}.tline small{font-size:.66rem;color:inherit;opacity:.8}.fig .h.hd{fill:transparent}.fig .knobl{stroke:#8A6FB0;stroke-width:1.2;stroke-dasharray:3 3}.fig .pbox{fill:#D9D0BE;stroke:#C9BFAB;stroke-width:.8}.fig .gplane{fill:#EFEBE2;stroke:none}.fig .h.small{stroke:#8A6FB0}
 .camr{display:flex;align-items:center;gap:.4rem;font-size:.78rem;color:var(--sub);margin-top:.35rem}.camr input{flex:1}
 .wrap:has(.mv-ed){max-width:1120px}
 .mv-ed{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(16rem,1fr);gap:1rem;align-items:start}
@@ -99,7 +99,7 @@ nav.tabs button[aria-selected="true"]{color:var(--ink);box-shadow:inset 0 3px 0 
 <script>
 (function(){
 "use strict";
-const APP_VERSION = "2026-10-07 r6";
+const APP_VERSION = "2026-10-07 r8";
 const DATA = "roadmap/apps/tanren/data.json";
 const KEY_CONN = "tn-conn", KEY_CACHE = "tn-cache", KEY_VOICE = "tn-voice";
 const state = { conn: null, doc: null, sha: null, view: "menus", editMenu: null, picker: false, editMove: null, frame: 0, preview: true, play: null };
@@ -284,14 +284,32 @@ function lerpPose(a, b, k){
   for (const [bn] of BONES) { const m = v3.add(v3.mul(a.d[bn], 1 - k), v3.mul(b.d[bn], k)); o.d[bn] = v3.len(m) < 1e-6 ? a.d[bn] : v3.norm(m); }
   return o;
 }
-function poseAt(move, t){
+// ポーズごとの時間:次のポーズまでの秒(trans)と、そのポーズで止める秒(holds)。無ければ「1回の秒」を均等に割る
+function timing(m){
+  const n = m.frames.length, sec = +m.sec || 2;
+  const tr = m.frames.map((f, i) => (m.trans && m.trans[i] != null && m.trans[i] !== "") ? Math.max(0.1, +m.trans[i]) : sec / n);
+  const ho = m.frames.map((f, i) => Math.max(0, +((m.holds || [])[i] || 0)));
+  if (m.noReturn && n > 1) tr[n - 1] = 0;                                   // 最後のポーズで終える(1へ戻らない)
+  const total = n === 1 ? Math.max(ho[0], sec) : tr.reduce((a, x) => a + x, 0) + ho.reduce((a, x) => a + x, 0);
+  return { tr, ho, total };
+}
+const cycleSec = m => timing(m).total;
+// t 秒の時点の形(hold=true なら、1回が終わったあとも最後の形のまま)
+function poseAtSec(move, t, hold){
   const fr = move.frames.map(f => place(f, move)), n = fr.length;
-  let p;
-  if (n === 1) p = fr[0];
-  else if (n === 2) p = lerpPose(fr[0], fr[1], (1 - Math.cos(t * 2 * Math.PI)) / 2);
-  else { const pos = ((t % 1) + 1) % 1 * n, i = Math.floor(pos), loc = pos - i; p = lerpPose(fr[i], fr[(i + 1) % n], (1 - Math.cos(Math.PI * loc)) / 2); }
+  if (n === 1) return fr[0];
+  const T = timing(move); let x = hold && t >= T.total ? T.total - 1e-6 : ((t % T.total) + T.total) % T.total, p = fr[0];
+  for (let i = 0; i < n; i++) {
+    if (x < T.ho[i]) { p = fr[i]; break; }
+    x -= T.ho[i];
+    if (i === n - 1 && move.noReturn) { p = fr[i]; break; }
+    if (x < T.tr[i]) { p = lerpPose(fr[i], fr[(i + 1) % n], (1 - Math.cos(Math.PI * x / T.tr[i])) / 2); break; }
+    x -= T.tr[i]; p = fr[(i + 1) % n];
+  }
   return Object.keys(move.pins || {}).length ? place(p, move) : p;
 }
+// 1回のうちの割合で(一覧の絵など)
+const poseAt = (move, f) => poseAtSec(move, f * cycleSec(move));
 
 /* ───────── 平面の動作(前の形)を立体に読み替える ───────── */
 const dir2 = a => [Math.sin(R(a)), Math.cos(R(a)), 0];
@@ -414,7 +432,7 @@ function speak(text){
 
 /* ───────── メニュー ───────── */
 const fmt = sec => { sec = Math.max(0, Math.round(sec)); return Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0"); };
-const itemSec = it => { const m = moveOf(it.move); return m ? (it.mode === "reps" ? it.value * m.sec : it.value) : 0; };
+const itemSec = it => { const m = moveOf(it.move); return m ? (it.mode === "reps" ? it.value * cycleSec(m) : it.value) : 0; };
 const menuSec = mn => mn.items.reduce((a, it, i) => a + itemSec(it) * it.sets + (it.rest || 0) * (it.sets - (i === mn.items.length - 1 ? 1 : 0)), 0);
 const mini = (m, cls) => { const p = poseAt(m, 0.25); return figureSvg(p, m.cam, { props: m.props, fit: fitOf(m) }).replace('class="fig"', 'class="fig' + (cls ? " " + cls : "") + '"'); };
 function renderMenus(){
@@ -452,7 +470,7 @@ function renderMoves(){
   const box = document.getElementById("moves");
   if (state.editMove) { box.innerHTML = moveEditorHtml(state.editMove); return; }
   const mine = (D() ? D().moves : []).filter(m => !m.deleted);
-  const card = m => '<button type="button" class="mcard" data-mopen="' + esc(m.id) + '">' + mini(m) + "<b>" + esc(m.name) + "</b><small>1回 " + m.sec + "秒" + (m.id.startsWith("c:") ? "・押して直す" : "") + "</small></button>";
+  const card = m => '<button type="button" class="mcard" data-mopen="' + esc(m.id) + '">' + mini(m) + "<b>" + esc(m.name) + "</b><small>1回 " + (Math.round(cycleSec(m) * 10) / 10) + "秒" + (m.id.startsWith("c:") ? "・押して直す" : "") + "</small></button>";
   box.innerHTML = "<h1>動作</h1>" + '<div class="panel"><div class="panel-h"><span>自分で作った動作</span><button type="button" class="linkbtn" data-mvnew>+ 新しく作る</button></div><div class="panel-b">' +
     (mine.length ? '<div class="mlist">' + mine.map(card).join("") + "</div>" : '<div class="empty">まだありません。用意した動作を押して「これをもとに作る」からも作れます。</div>') + "</div></div>" +
     '<div class="panel"><div class="panel-h"><span>用意した動作</span></div><div class="panel-b"><div class="mlist">' + BUILTIN.map(card).join("") + "</div></div></div>";
@@ -467,10 +485,18 @@ function moveEditorHtml(m){
   const ctl = '<div class="mv-ctlcol">' +
     (builtin ? '<p class="empty" style="margin-top:0">用意した動作は直せません。「これをもとに作る」で自分の動作として直せます。</p>'
       : sec("動作", '<div class="f"><label>名前</label><input id="mv-name" value="' + esc(m.name) + '" placeholder="お尻のストレッチ"></div>' +
-        '<div class="grid2" style="margin-top:.3rem"><div class="f"><label>1回にかける秒</label><input id="mv-sec" type="number" min="0.5" step="0.1" value="' + m.sec + '"></div>' +
+        '<div class="grid2" style="margin-top:.3rem">' +
         '<div class="f"><label>地面へのつけ方(固定が無いとき)</label><select id="mv-plant"><option value="feet"' + ((m.plant || {}).mode !== "lowest" ? " selected" : "") + '>足を地面に</option><option value="lowest"' + ((m.plant || {}).mode === "lowest" ? " selected" : "") + ">体の一番低いところを地面に(寝る・座る)</option></select></div></div>")) +
-    sec("ポーズ", '<div class="chips">' + m.frames.map((f, i) => '<button type="button" class="chip-b" data-frame="' + i + '" aria-pressed="' + (i === state.frame && !state.preview) + '">' + (i + 1) + "</button>").join("") +
-      '<button type="button" class="chip-b" data-preview aria-pressed="' + state.preview + '">▶ 通して見る</button></div>' +
+    sec("ポーズと時間", (() => { const T = timing(m), n = m.frames.length, r1 = x => Math.round(x * 10) / 10;
+      return '<div class="tline">' + m.frames.map((f, i) => '<button type="button" class="chip-b" data-frame="' + i + '" aria-pressed="' + (i === state.frame && !state.preview) + '">' + (i + 1) + (T.ho[i] && n > 1 ? '<small> 止' + r1(T.ho[i]) + "秒</small>" : "") + "</button>" +
+          (n > 1 && !(m.noReturn && i === n - 1) ? '<span class="tarrow">→' + r1(T.tr[i]) + "秒→</span>" : "")).join("") +
+          (n > 1 ? (m.noReturn ? "" : '<span class="tarrow">1へ</span>') + (builtin ? "" : '<button type="button" class="chip-b endb" data-noret aria-pressed="' + !!m.noReturn + '" title="1回の終わりに、ポーズ1へ戻るか、最後のポーズで終えるか">' + (m.noReturn ? "■ ここで終える" : "↺ 1へ戻る") + "</button>") : "") + "</div>" +
+        '<div class="empty" style="font-size:.76rem;margin-top:.2rem">1回 ' + r1(T.total) + "秒</div>" +
+        (builtin || state.preview ? "" : '<div class="grid2" style="margin-top:.35rem">' +
+          (n > 1 ? '<div class="f"><label>ポーズ' + (state.frame + 1) + "で止める秒</label><input id=\"mv-hold\" type=\"number\" min=\"0\" step=\"0.5\" value=\"" + r1(T.ho[state.frame]) + '"></div>' +
+(m.noReturn && state.frame === n - 1 ? '<div class="f"><label>&nbsp;</label><span class="empty" style="font-size:.76rem">最後のポーズで終える</span></div>' :             '<div class="f"><label>ポーズ' + (state.frame + 1) + "→" + ((state.frame + 1) % n + 1) + "にかける秒</label><input id=\"mv-trans\" type=\"number\" min=\"0.1\" step=\"0.1\" value=\"" + r1(T.tr[state.frame]) + '"></div>')
+            : '<div class="f"><label>この形を続ける秒</label><input id="mv-sec" type="number" min="0.5" step="0.5" value="' + r1(T.total) + '"></div>') + "</div>"); })() +
+      '<div class="chips" style="margin-top:.35rem"><button type="button" class="chip-b" data-preview aria-pressed="' + state.preview + '">▶ 通して見る</button></div>' +
       (builtin ? "" : '<div class="chips" style="margin-top:.3rem"><button type="button" class="chip-b" data-fadd>+ この形を写して足す</button>' + (m.frames.length > 1 ? '<button type="button" class="chip-b" data-fdel>このポーズを消す</button>' : "") + "</div>")) +
     sec("カメラ", '<div class="chips cam">' + [["正面", 0, 0], ["横から", 90, 0], ["上から", 0, 80], ["斜め", -35, 25]].map(([l, y, p]) => '<button type="button" class="chip-b" data-cam="' + y + ":" + p + '" aria-pressed="' + (c.yaw === y && c.pitch === p) + '">' + l + "</button>").join("") + "</div>" +
       '<label class="camr">回す<input type="range" id="cam-yaw" min="-180" max="180" step="5" value="' + c.yaw + '"></label><label class="camr">見下ろす<input type="range" id="cam-pitch" min="0" max="85" step="5" value="' + c.pitch + '"></label>') +
@@ -537,10 +563,10 @@ function tickPlayer(){
   const pl = state.play; if (!pl || pl.done) return;
   const seg = pl.segs[pl.i], t = elapsed(), m = moveOf((seg.kind === "move" ? seg.it : seg.next).move);
   const fig = document.getElementById("pl-stage");
-  if (fig) fig.innerHTML = figureSvg(poseAt(m, seg.kind === "move" && !m.hold ? t / m.sec : (seg.kind === "move" ? 0 : t / (m.sec * 1.6))), m.cam, { id: "pl-fig", props: m.props, fit: m.__fit || (m.__fit = fitOf(m)) });
+  if (fig) fig.innerHTML = figureSvg(seg.kind === "move" ? (m.hold ? poseAt(m, 0) : poseAtSec(m, t, m.noReturn && seg.it.mode !== "reps")) : poseAtSec(m, t / 1.6), m.cam, { id: "pl-fig", props: m.props, fit: m.__fit || (m.__fit = fitOf(m)) });
   const left = seg.dur - t, big = document.getElementById("pl-big"), sub = document.getElementById("pl-sub"), bar = document.getElementById("pl-bar");
   if (seg.kind === "move" && seg.it.mode === "reps") {
-    const done = Math.min(seg.it.value, Math.floor(t / m.sec)), rem = seg.it.value - done;
+    const done = Math.min(seg.it.value, Math.floor(t / cycleSec(m))), rem = seg.it.value - done;
     if (big) big.textContent = "あと " + rem + " 回"; if (sub) sub.textContent = done + " / " + seg.it.value + " 回" + (seg.it.sets > 1 ? "・" + seg.set + "/" + seg.it.sets + "セット" : "");
     if (rem === 3 && seg.it.value > 3 && !pl.said.r3) { pl.said.r3 = true; speak("あと3回"); }
   } else {
@@ -561,7 +587,7 @@ function loop(){ if (!state.play || state.play.done) return; tickPlayer(); state
 
 /* ───────── 動作を作る画面のアニメーションとドラッグ ───────── */
 function previewLoop(ts){
-  if (state.editMove && state.preview && state.view === "moves") { const st = document.getElementById("mv-stage"), m = state.editMove; if (st) st.innerHTML = figureSvg(poseAt(m, (nowMs() / 1000) / m.sec), m.cam, { id: "mv-fig", props: m.props }); }
+  if (state.editMove && state.preview && state.view === "moves") { const st = document.getElementById("mv-stage"), m = state.editMove; if (st) st.innerHTML = figureSvg(poseAtSec(m, nowMs() / 1000), m.cam, { id: "mv-fig", props: m.props }); }
   requestAnimationFrame(previewLoop);
 }
 function svgPoint(svg, ev){ const pt = svg.createSVGPoint ? svg.createSVGPoint() : { x: 0, y: 0 }; pt.x = ev.clientX; pt.y = ev.clientY; const m = svg.getScreenCTM && svg.getScreenCTM(); const r = m && pt.matrixTransform ? pt.matrixTransform(m.inverse()) : pt; return [r.x, r.y]; }
@@ -591,7 +617,13 @@ function editStage(m){
 }
 function readMove(m){
   const v = id => (document.getElementById(id) || {}).value;
-  if (document.getElementById("mv-name")) { m.name = (v("mv-name") || "").trim(); m.sec = Math.max(0.5, +v("mv-sec") || 2); m.plant = v("mv-plant") === "lowest" ? { mode: "lowest" } : {}; }
+  if (document.getElementById("mv-name")) { m.name = (v("mv-name") || "").trim(); m.plant = v("mv-plant") === "lowest" ? { mode: "lowest" } : {}; }
+  const T = timing(m), n = m.frames.length;
+  m.trans = T.tr.slice(); m.holds = T.ho.slice();
+  if (document.getElementById("mv-trans")) m.trans[state.frame] = Math.max(0.1, +v("mv-trans") || T.tr[state.frame]);
+  if (document.getElementById("mv-hold")) m.holds[state.frame] = Math.max(0, +v("mv-hold") || 0);
+  if (document.getElementById("mv-sec")) m.sec = Math.max(0.5, +v("mv-sec") || 2);
+  if (n > 1) m.sec = Math.round(timing(m).total * 100) / 100;
 }
 
 
@@ -632,6 +664,7 @@ function bind(){
     document.getElementById("mv-stage").innerHTML = editStage(m);
   });
   document.getElementById("moves").addEventListener("change", e => {
+    if (state.editMove && ["mv-trans", "mv-hold", "mv-sec"].includes(e.target.id)) { readMove(state.editMove); return renderMoves(); }
     if (e.target.id !== "mv-prop-type" || !state.editMove || !e.target.value) return;
     const m = state.editMove, t = e.target.value; readMove(m);
     m.props = (m.props || []).concat([{ type: t, x: t === "wall" ? 90 : t === "mat" ? -100 : -60, y: t === "chair" ? 42 : t === "box" ? 30 : t === "bar" ? 150 : 0, z: 0, w: t === "wall" ? 10 : t === "mat" ? 200 : t === "chair" ? 46 : 60, h: 44, d: t === "mat" ? 60 : 44 }]);
@@ -651,10 +684,14 @@ function bind(){
     if ((b = q("[data-frame]"))) { state.frame = +b.dataset.frame; state.preview = false; return renderMoves(); }
     if (q("[data-preview]")) { state.preview = !state.preview; state.pinMode = false; return renderMoves(); }
     if (q("[data-pinmode]")) { state.pinMode = !state.pinMode; return renderMoves(); }
+    if (q("[data-noret]")) { m.noReturn = !m.noReturn; if (m.frames.length > 1) m.sec = Math.round(timing(m).total * 100) / 100; return renderMoves(); }
     if ((b = q("[data-cam]"))) { const [y, p] = b.dataset.cam.split(":").map(Number); m.cam = { yaw: y, pitch: p }; return renderMoves(); }
     if ((b = q("[data-prop-del]"))) { m.props.splice(+b.dataset.propDel, 1); return renderMoves(); }
-    if (q("[data-fadd]")) { m.frames.splice(state.frame + 1, 0, clone(m.frames[state.frame])); state.frame++; state.preview = false; return renderMoves(); }
-    if (q("[data-fdel]")) { if (m.frames.length > 1) { m.frames.splice(state.frame, 1); state.frame = Math.max(0, state.frame - 1); } return renderMoves(); }
+    if (q("[data-fadd]")) { const T = timing(m); m.trans = T.tr.slice(); m.holds = T.ho.slice();
+      m.frames.splice(state.frame + 1, 0, clone(m.frames[state.frame])); m.trans.splice(state.frame + 1, 0, T.tr[state.frame]); m.holds.splice(state.frame + 1, 0, 0);
+      m.sec = timing(m).total; state.frame++; state.preview = false; return renderMoves(); }
+    if (q("[data-fdel]")) { if (m.frames.length > 1) { const T = timing(m); m.trans = T.tr.slice(); m.holds = T.ho.slice();
+      m.frames.splice(state.frame, 1); m.trans.splice(state.frame, 1); m.holds.splice(state.frame, 1); m.sec = timing(m).total; state.frame = Math.max(0, state.frame - 1); } return renderMoves(); }
     if (q("[data-mvdel]")) { if (!confirm("この動作を消しますか。")) return; const id = m.id; state.editMove = null; return commit(doc => { doc.moves.find(x => x.id === id).deleted = today(); }); }
     if (q("[data-mvsave]")) {
       if (!m.name) return say("名前を入れてください。", true);
@@ -713,7 +750,7 @@ function boot(){
   if (c && c.token) { state.conn = c; load(); }
   requestAnimationFrame(previewLoop);
 }
-window.__tn = { fitOf, figureSvg, state, BUILTIN, poseAt, plant, place, joints, togglePin, toCam, fromCam, v3, buildSegs, tickPlayer, goSeg, menuSec, dragTo };
+window.__tn = { timing, cycleSec, poseAtSec, fitOf, figureSvg, state, BUILTIN, poseAt, plant, place, joints, togglePin, toCam, fromCam, v3, buildSegs, tickPlayer, goSeg, menuSec, dragTo };
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 })();
 </script>
