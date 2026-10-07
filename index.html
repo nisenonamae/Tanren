@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>鍛錬</title>
+<meta name="theme-color" content="#F5F1E8">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/png" href="./icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--paper:#F5F1E8;--ink:#23201B;--sub:#7A7266;--rule:#DDD5C6;--card:#fff;--acc:#2F6E8A;--rest:#3D8A5A}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--paper);color:var(--ink)}
+body{font-family:"Zen Kaku Gothic New","Hiragino Sans",sans-serif;font-size:15px;line-height:1.6;padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+button,input,select{font:inherit;color:inherit}
+.wrap{max-width:760px;margin:0 auto;padding:1rem}
+h1{font-size:1.2rem;margin:0 0 .8rem;letter-spacing:.1em}
+[hidden]{display:none !important}
+.panel{border:1px solid var(--rule);border-radius:6px;background:var(--card);margin:.7rem 0;overflow:hidden}
+.panel-h{display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.45rem .75rem;border-bottom:1px solid var(--rule);background:#FAF8F3;font-weight:700;font-size:.88rem}
+.panel-b{padding:.6rem .75rem}
+.empty{color:var(--sub);font-size:.86rem}
+.btn{border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:4px;padding:.4rem .9rem;cursor:pointer;font-weight:700}
+.btn.ghost{background:transparent;color:var(--ink)}.btn.sm{padding:.2rem .6rem;font-size:.84rem;font-weight:400}
+.linkbtn{border:none;background:none;color:var(--acc);cursor:pointer;padding:0;font-size:.84rem}
+.row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+.f label{display:block;font-size:.76rem;color:var(--sub);margin-bottom:.15rem}
+.f input,.f select{width:100%;border:1px solid var(--rule);border-radius:4px;padding:.4rem .5rem;background:#fff}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(8rem,1fr));gap:.5rem}
+.status{font-size:.84rem;color:var(--sub)}.status.err{color:#B3283C}
+.fig{width:100%;background:#FBFAF6;border:1px solid var(--rule);border-radius:10px;touch-action:none}
+.fig .bone{stroke:var(--ink);stroke-width:10;stroke-linecap:round;fill:none}
+.fig .far{stroke:#A8A093}.fig .headc{fill:var(--ink)}.fig .ground{stroke:var(--rule);stroke-width:2}
+.fig .h{fill:#fff;stroke:var(--acc);stroke-width:2.5;cursor:grab}.fig .h.root{stroke:#B3283C}
+.mlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(9.5rem,1fr));gap:.5rem}
+.mcard{border:1px solid var(--rule);border-radius:8px;background:#fff;padding:.3rem;cursor:pointer;text-align:center}
+.mcard svg{width:100%;height:auto;background:none;border:none}.mcard b{font-size:.84rem;display:block}.mcard small{color:var(--sub);font-size:.72rem}
+.item{display:grid;grid-template-columns:3.2rem 1fr auto;gap:.5rem;align-items:center;border-top:1px dashed var(--rule);padding:.4rem 0}
+.item svg{width:3.2rem;height:2.4rem;border:none;background:none}
+.item .iset{display:flex;gap:.3rem;flex-wrap:wrap;align-items:center;font-size:.8rem}
+.item .iset input,.item .iset select{width:4.2rem;border:1px solid var(--rule);border-radius:4px;padding:.15rem .3rem}
+.chips{display:flex;flex-wrap:wrap;gap:.3rem}
+.chip-b{border:1px solid var(--rule);background:#fff;border-radius:12px;padding:.1rem .6rem;font-size:.8rem;cursor:pointer}
+.chip-b[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+/* 再生 */
+.player{position:fixed;inset:0;background:var(--paper);z-index:20;display:flex;flex-direction:column;padding:calc(.8rem + env(safe-area-inset-top)) 1rem calc(.8rem + env(safe-area-inset-bottom))}
+.player .top{display:flex;justify-content:space-between;align-items:center;font-size:.86rem;color:var(--sub)}
+.player .stage{flex:1;display:flex;align-items:center;justify-content:center;min-height:0}
+.player .stage svg{max-height:100%;max-width:640px;border:none;background:none}
+.player .now{text-align:center}.player .now .nm{font-size:1.7rem;font-weight:700}
+.player .big{font-size:3.2rem;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+.player .sub2{color:var(--sub);font-size:.9rem}
+.player.rest .nm{color:var(--rest)}.player .bar{height:6px;background:var(--rule);border-radius:3px;overflow:hidden;margin:.5rem 0}.player .bar i{display:block;height:100%;background:var(--acc)}
+.player.rest .bar i{background:var(--rest)}
+.player .ctl{display:flex;gap:.6rem;justify-content:center;margin-top:.6rem}
+.player .ctl button{border:1px solid var(--rule);background:#fff;border-radius:50%;width:3.4rem;height:3.4rem;font-size:1.2rem;cursor:pointer}
+.player .ctl button.main{width:4.2rem;height:4.2rem;background:var(--ink);color:#fff;border-color:var(--ink)}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;background:#FBF9F4;border-top:1px solid var(--rule);display:flex;padding-bottom:env(safe-area-inset-bottom)}
+nav.tabs button{flex:1;border:none;background:none;padding:.8rem 0;cursor:pointer;color:var(--sub);font-weight:700}
+nav.tabs button[aria-selected="true"]{color:var(--ink);box-shadow:inset 0 3px 0 var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <section class="view" id="view-menus"><div id="menus"></div></section>
+  <section class="view" id="view-moves" hidden><div id="moves"></div></section>
+  <section class="view" id="view-settings" hidden>
+    <h1>設定</h1>
+    <div class="panel"><div class="panel-h">声の案内</div><div class="panel-b">
+      <label class="row"><input type="checkbox" id="voice-on"> 声で案内する(次の動作・あと3秒・休憩)</label>
+      <div class="row" style="margin-top:.4rem"><span class="status">速さ</span><input type="range" id="voice-rate" min="0.7" max="1.5" step="0.1" style="flex:1"><button class="btn ghost sm" type="button" id="voice-test">試しに話す</button></div>
+    </div></div>
+    <div class="panel"><div class="panel-h">接続</div><div class="panel-b">
+      <p class="empty" style="margin-top:0">行軍表・省アプリと同じトークンが使えます(同じ端末で入れてあれば自動で使います)。</p>
+      <div class="grid2"><div class="f"><label>ユーザー名</label><input id="c-owner"></div><div class="f"><label>リポジトリ</label><input id="c-repo"></div><div class="f"><label>ブランチ</label><input id="c-branch"></div></div>
+      <div class="f" style="margin-top:.4rem"><label>トークン</label><input id="c-token" type="password"></div>
+      <div class="row" style="margin-top:.6rem"><button class="btn" id="connect" type="button">接続して読み込む</button><span class="status" id="conn-status"></span></div>
+    </div></div>
+    <p class="status" id="ver"></p>
+  </section>
+  <span class="status" id="msg"></span>
+</div>
+<div class="player" id="player" hidden></div>
+<nav class="tabs" role="tablist">
+  <button role="tab" data-view="menus" aria-selected="true">メニュー</button>
+  <button role="tab" data-view="moves" aria-selected="false">動作</button>
+  <button role="tab" data-view="settings" aria-selected="false">設定</button>
+</nav>
+<script>
+(function(){
+"use strict";
+const APP_VERSION = "2026-10-07 r1";
+const DATA = "roadmap/apps/tanren/data.json";
+const KEY_CONN = "tn-conn", KEY_CACHE = "tn-cache", KEY_VOICE = "tn-voice";
+const state = { conn: null, doc: null, sha: null, view: "menus", editMenu: null, picker: false, editMove: null, frame: 0, preview: true, play: null };
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const lsGet = (k, fb) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : fb; } catch (e) { return fb; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const today = () => window.__tnToday || new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
+const nowMs = () => window.__tnNow ? window.__tnNow() : performance.now();
+const say = (t, err) => { const el = document.getElementById("msg"); el.textContent = t; el.classList.toggle("err", !!err); };
+const emptyDoc = () => ({ version: 1, moves: [], menus: [], runs: [] });
+
+/* ───────── 人の骨組み:関節の角度だけで描く(0=上、90=右、180=下、270=左) ───────── */
+const SEG = { torso: 51, neck: 12, head: 11, uarm: 33, farm: 30, thigh: 44, shin: 43 };
+const GROUND = 212, W = 320, H = 240;
+const R = x => x * Math.PI / 180;
+const vec = (g, l) => [Math.sin(R(g)) * l, -Math.cos(R(g)) * l];
+const add = (a, g, l) => { const v = vec(g, l); return [a[0] + v[0], a[1] + v[1]]; };
+const ANG = ["c", "d1", "e1", "d2", "e2", "f1", "g1", "f2", "g2"];
+function joints(p){
+  const P = [p.px, p.py], S = add(P, p.c, SEG.torso), Hd = add(S, p.c, SEG.neck + SEG.head);
+  const E1 = add(S, p.d1, SEG.uarm), W1 = add(E1, p.e1, SEG.farm), E2 = add(S, p.d2, SEG.uarm), W2 = add(E2, p.e2, SEG.farm);
+  const K1 = add(P, p.f1, SEG.thigh), A1 = add(K1, p.g1, SEG.shin), K2 = add(P, p.f2, SEG.thigh), A2 = add(K2, p.g2, SEG.shin);
+  return { P, S, H: Hd, E1, W1, E2, W2, K1, A1, K2, A2 };
+}
+// 足(または腰)を地面につける。ax があれば前の足首の横の位置もそろえる
+function plant(p, how){
+  const q = Object.assign({}, p);
+  if (how && how.mode === "pelvis") { q.py = GROUND - 10; if (how.px != null) q.px = how.px; return q; }
+  let j = joints(q);
+  q.py += GROUND - Math.max(j.A1[1], j.A2[1]);
+  if (how && how.ax != null) { j = joints(q); q.px += how.ax - j.A1[0]; }
+  if (q.lift) q.py -= q.lift;
+  return q;
+}
+const line = (a, b, cls) => '<line class="bone' + (cls ? " " + cls : "") + '" x1="' + a[0].toFixed(1) + '" y1="' + a[1].toFixed(1) + '" x2="' + b[0].toFixed(1) + '" y2="' + b[1].toFixed(1) + '"/>';
+function figureSvg(p, view, opts){
+  opts = opts || {};
+  const j = joints(p), side = view !== "front", far = side ? "far" : "";
+  const foot = (A, k) => side ? line(A, [A[0] + (p.lift ? 8 : 14), A[1] + (p.lift ? 6 : 0)], k) : "";
+  let h = '<svg viewBox="0 0 ' + W + " " + H + '" class="fig"' + (opts.id ? ' id="' + opts.id + '"' : "") + ' role="img" aria-label="動作">' +
+    '<line class="ground" x1="8" y1="' + (GROUND + 2) + '" x2="' + (W - 8) + '" y2="' + (GROUND + 2) + '"/>' +
+    line(j.S, j.E2, far) + line(j.E2, j.W2, far) + line(j.P, j.K2, far) + line(j.K2, j.A2, far) + foot(j.A2, far) +
+    line(j.P, j.S) + line(j.P, j.K1) + line(j.K1, j.A1) + foot(j.A1) + line(j.S, j.E1) + line(j.E1, j.W1) +
+    '<circle class="headc" cx="' + j.H[0].toFixed(1) + '" cy="' + j.H[1].toFixed(1) + '" r="' + SEG.head + '"/>';
+  if (opts.handles) h += Object.entries({ P: j.P, S: j.S, E1: j.E1, W1: j.W1, E2: j.E2, W2: j.W2, K1: j.K1, A1: j.A1, K2: j.K2, A2: j.A2 })
+    .map(([k, v]) => '<circle class="h' + (k === "P" ? " root" : "") + '" data-j="' + k + '" cx="' + v[0].toFixed(1) + '" cy="' + v[1].toFixed(1) + '" r="' + (k === "P" ? 9 : 7) + '"/>').join("");
+  return h + "</svg>";
+}
+// ポーズのあいだをなめらかにつなぐ(角度は近いほうに回る)
+function lerpPose(a, b, k){
+  const o = {};
+  for (const key of ANG) { let dlt = ((b[key] - a[key]) % 360 + 540) % 360 - 180; o[key] = a[key] + dlt * k; }
+  o.px = a.px + (b.px - a.px) * k; o.py = a.py + (b.py - a.py) * k; o.lift = (a.lift || 0) + ((b.lift || 0) - (a.lift || 0)) * k;
+  return o;
+}
+function poseAt(move, t){
+  const fr = move.frames.map(f => plant(f, move.plant)), n = fr.length;
+  if (n === 1) return fr[0];
+  if (n === 2) return lerpPose(fr[0], fr[1], (1 - Math.cos(t * 2 * Math.PI)) / 2);
+  const pos = ((t % 1) + 1) % 1 * n, i = Math.floor(pos), loc = pos - i;
+  return lerpPose(fr[i], fr[(i + 1) % n], (1 - Math.cos(Math.PI * loc)) / 2);
+}
+
+/* ───────── 用意した動作 ───────── */
+const ST = { c: 0, d1: 180, e1: 180, d2: 180, e2: 180, f1: 180, g1: 180, f2: 180, g2: 180, px: 160, py: 125 };
+const P_ = o => Object.assign({}, ST, o);
+const BUILTIN = [
+  { id: "b:squat", name: "スクワット", view: "side", sec: 2.4, plant: { ax: 170 }, frames: [P_({ d1: 90, e1: 90, d2: 90, e2: 90 }), P_({ c: 38, f1: 100, g1: 200, f2: 100, g2: 200, d1: 95, e1: 95, d2: 95, e2: 95 })] },
+  { id: "b:pushup", name: "腕立て伏せ", view: "side", sec: 2.6, plant: { ax: 70 }, frames: [P_({ c: 62, f1: 240, g1: 240, f2: 240, g2: 240, d1: 185, e1: 185, d2: 185, e2: 185 }), P_({ c: 74, f1: 252, g1: 252, f2: 252, g2: 252, d1: 222, e1: 140, d2: 222, e2: 140 })] },
+  { id: "b:plank", name: "プランク", view: "side", sec: 3, hold: true, plant: { ax: 70 }, frames: [P_({ c: 78, f1: 256, g1: 256, f2: 256, g2: 256, d1: 180, e1: 92, d2: 180, e2: 92 })] },
+  { id: "b:bend", name: "前屈ストレッチ", view: "side", sec: 4, plant: { ax: 160 }, frames: [P_({}), P_({ c: 118, f1: 168, g1: 180, f2: 168, g2: 180, d1: 170, e1: 172, d2: 170, e2: 172 })] },
+  { id: "b:lunge", name: "ランジ", view: "side", sec: 2.8, plant: { ax: 190 }, frames: [P_({ f1: 165, g1: 180, f2: 195, g2: 180 }), P_({ f1: 100, g1: 185, f2: 215, g2: 262 })] },
+  { id: "b:calf", name: "カーフレイズ", view: "side", sec: 2, plant: { ax: 160 }, frames: [P_({}), P_({ lift: 12 })] },
+  { id: "b:knee", name: "もも上げ", view: "side", sec: 1.6, plant: {}, frames: [P_({ f1: 95, g1: 180, d1: 150, e1: 120, d2: 210, e2: 200 }), P_({}), P_({ f2: 95, g2: 180, d2: 150, e2: 120, d1: 210, e1: 200 }), P_({})] },
+  { id: "b:crunch", name: "腹筋(クランチ)", view: "side", sec: 2.4, plant: { mode: "pelvis", px: 150 }, frames: [P_({ c: 280, d1: 100, e1: 100, d2: 100, e2: 100, f1: 35, g1: 150, f2: 35, g2: 150 }), P_({ c: 308, d1: 75, e1: 75, d2: 75, e2: 75, f1: 35, g1: 150, f2: 35, g2: 150 })] },
+  { id: "b:jack", name: "ジャンピングジャック", view: "front", sec: 1.4, plant: {}, frames: [P_({ f1: 175, g1: 175, f2: 185, g2: 185, d1: 190, e1: 185, d2: 170, e2: 175 }), P_({ f1: 160, g1: 160, f2: 200, g2: 200, d1: 320, e1: 330, d2: 40, e2: 30 })] },
+  { id: "b:side", name: "体側ストレッチ", view: "front", sec: 4, plant: {}, frames: [P_({ f1: 172, g1: 172, f2: 188, g2: 188, d1: 345, e1: 355, d2: 15, e2: 5 }), P_({ c: 20, f1: 172, g1: 172, f2: 188, g2: 188, d1: 10, e1: 40, d2: 40, e2: 70 })] },
+  { id: "b:shoulder", name: "肩回し", view: "front", sec: 3, plant: {}, frames: [P_({ f1: 174, g1: 174, f2: 186, g2: 186 }), P_({ f1: 174, g1: 174, f2: 186, g2: 186, d1: 255, e1: 255, d2: 105, e2: 105 }), P_({ f1: 174, g1: 174, f2: 186, g2: 186, d1: 345, e1: 345, d2: 15, e2: 15 }), P_({ f1: 174, g1: 174, f2: 186, g2: 186, d1: 255, e1: 255, d2: 105, e2: 105 })] },
+  { id: "b:reach", name: "背伸び", view: "front", sec: 3, plant: {}, frames: [P_({ f1: 176, g1: 176, f2: 184, g2: 184 }), P_({ f1: 176, g1: 176, f2: 184, g2: 184, d1: 352, e1: 356, d2: 8, e2: 4, lift: 5 })] },
+];
+const D = () => state.doc;
+const allMoves = () => BUILTIN.concat((D() ? D().moves : []).filter(m => !m.deleted));
+const moveOf = id => allMoves().find(m => m.id === id);
+/* ───── GitHub ───── */
+function b64e(str){ const b = new TextEncoder().encode(str); let s = ""; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); }
+function b64d(b64){ const bin = atob(String(b64).replace(/\s/g, "")); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new TextDecoder().decode(u); }
+const repo = () => "https://api.github.com/repos/" + encodeURIComponent(state.conn.owner) + "/" + encodeURIComponent(state.conn.repo);
+const hdr = x => Object.assign({ "Authorization": "Bearer " + state.conn.token, "Accept": "application/vnd.github+json" }, x || {});
+async function fetchRetry(url, opts){ let last; for (let i = 0; i < 3; i++) { try { return await fetch(url, opts); } catch (e) { last = e; await new Promise(r => setTimeout(r, 500 * (i + 1))); } } throw last; }
+function httpErr(st, p){ const e = new Error(st === 401 ? "トークンが無効です。設定から入れ直してください。" : "GitHubとの通信に失敗しました(" + st + " " + p + ")。"); e.status = st; return e; }
+async function readJson(path){
+  const url = repo() + "/contents/" + path + "?ref=" + encodeURIComponent(state.conn.branch);
+  const r = await fetchRetry(url, { headers: hdr(), cache: "no-store" });
+  if (r.status === 404) return { data: null, sha: null };
+  if (!r.ok) throw httpErr(r.status, path);
+  const meta = await r.json();
+  let text = meta.content ? b64d(meta.content) : null;
+  if (text == null) text = await (await fetchRetry(url, { headers: hdr({ "Accept": "application/vnd.github.raw+json" }), cache: "no-store" })).text();
+  return { data: JSON.parse(text), sha: meta.sha };
+}
+async function writeJson(path, obj, sha, msg){
+  const body = { message: msg || "思案を更新", content: b64e(JSON.stringify(obj, null, 1)), branch: state.conn.branch };
+  if (sha) body.sha = sha;
+  const r = await fetchRetry(repo() + "/contents/" + path, { method: "PUT", headers: hdr({ "Content-Type": "application/json" }), body: JSON.stringify(body) });
+  if (!r.ok) throw httpErr(r.status, path);
+  return (await r.json()).content.sha;
+}
+async function load(){
+  if (!state.conn || !state.conn.token) return false;
+  try { const r = await readJson(DATA); state.doc = Object.assign(emptyDoc(), r.data || {}); state.sha = r.sha; lsSet(KEY_CACHE, { doc: state.doc, sha: state.sha }); render(); return true; }
+  catch (e) { say(e.message, true); return false; }
+}
+async function commit(mutate){
+  mutate(state.doc); lsSet(KEY_CACHE, { doc: state.doc, sha: state.sha }); render();
+  if (!state.conn || !state.conn.token) return true;
+  for (let i = 0; i < 3; i++) {
+    try { state.sha = await writeJson(DATA, state.doc, state.sha); lsSet(KEY_CACHE, { doc: state.doc, sha: state.sha }); return true; }
+    catch (e) { if ((e.status === 409 || e.status === 422) && i < 2) { const f = await readJson(DATA); state.doc = Object.assign(emptyDoc(), f.data || {}); state.sha = f.sha; mutate(state.doc); continue; } say(e.message, true); return false; }
+  }
+}
+
+/* ───────── 声の案内 ───────── */
+const voice = () => Object.assign({ on: true, rate: 1.1 }, lsGet(KEY_VOICE, {}));
+function speak(text){
+  const v = voice(); if (!v.on || !("speechSynthesis" in window)) return;
+  try { window.speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = "ja-JP"; u.rate = v.rate; window.speechSynthesis.speak(u); window.__tnSaid = (window.__tnSaid || []).concat([text]); } catch (e) {}
+}
+
+/* ───────── メニュー ───────── */
+const fmt = sec => { sec = Math.max(0, Math.round(sec)); return Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0"); };
+const itemSec = it => { const m = moveOf(it.move); return m ? (it.mode === "reps" ? it.value * m.sec : it.value) : 0; };
+const menuSec = mn => mn.items.reduce((a, it, i) => a + itemSec(it) * it.sets + (it.rest || 0) * (it.sets - (i === mn.items.length - 1 ? 1 : 0)), 0);
+const mini = (m, cls) => { const p = poseAt(m, 0.25); return figureSvg(p, m.view).replace('class="fig"', 'class="fig' + (cls ? " " + cls : "") + '"'); };
+function renderMenus(){
+  const box = document.getElementById("menus");
+  if (state.editMenu) { box.innerHTML = menuEditorHtml(state.editMenu); return; }
+  const ms = (D() ? D().menus : []).filter(m => !m.deleted);
+  const lastRun = id => (D().runs || []).filter(r => r.menu === id).map(r => r.date).sort().pop();
+  box.innerHTML = "<h1>メニュー</h1>" + (ms.length ? ms.map(mn => '<div class="panel"><div class="panel-h"><span>' + esc(mn.name) + '</span><span class="status">' + fmt(menuSec(mn)) + (lastRun(mn.id) ? "・前回 " + esc(lastRun(mn.id).slice(5).replace("-", "/")) : "") + "</span></div>" +
+      '<div class="panel-b"><div class="empty">' + mn.items.map(it => esc((moveOf(it.move) || { name: "?" }).name) + " " + it.value + (it.mode === "reps" ? "回" : "秒") + (it.sets > 1 ? "×" + it.sets : "")).join("・") + "</div>" +
+      '<div class="row" style="margin-top:.5rem"><button type="button" class="btn" data-play="' + mn.id + '">▶ 始める</button><button type="button" class="btn ghost sm" data-medit="' + mn.id + '">直す</button>' +
+      '<button type="button" class="linkbtn" data-mdel="' + mn.id + '" style="margin-left:auto;color:#B3283C">消す</button></div></div></div>').join("")
+    : '<div class="empty">まだメニューがありません。動作を並べて作りましょう。</div>') +
+    '<div class="row" style="margin-top:.6rem"><button type="button" class="btn" data-mnew>+ メニューを作る</button></div>';
+}
+function menuEditorHtml(mn){
+  return "<h1>" + (mn.id && (D().menus || []).some(x => x.id === mn.id) ? "メニューを直す" : "メニューを作る") + "</h1>" +
+    '<div class="f"><label>名前</label><input id="mn-name" value="' + esc(mn.name) + '" placeholder="朝のストレッチ"></div>' +
+    '<div class="panel"><div class="panel-h"><span>動作の並び</span><span class="status">合計 ' + fmt(menuSec(mn)) + '</span></div><div class="panel-b">' +
+    (mn.items.length ? mn.items.map((it, i) => { const m = moveOf(it.move) || { name: "?", view: "side", frames: [ST], sec: 2 };
+      return '<div class="item">' + mini(m) + '<div><b>' + esc(m.name) + '</b><div class="iset"><select data-it="mode" data-i="' + i + '"><option value="time"' + (it.mode === "time" ? " selected" : "") + '>秒</option><option value="reps"' + (it.mode === "reps" ? " selected" : "") + ">回</option></select>" +
+        '<input type="number" min="1" data-it="value" data-i="' + i + '" value="' + it.value + '"><span>×</span><input type="number" min="1" data-it="sets" data-i="' + i + '" value="' + it.sets + '"><span>セット 休憩</span><input type="number" min="0" data-it="rest" data-i="' + i + '" value="' + it.rest + '"><span>秒</span></div></div>' +
+        '<div class="row" style="gap:.2rem"><button type="button" class="btn ghost sm" data-iup="' + i + '" aria-label="上へ">▲</button><button type="button" class="btn ghost sm" data-idown="' + i + '" aria-label="下へ">▼</button><button type="button" class="linkbtn" data-idel="' + i + '" style="color:#B3283C">外す</button></div></div>'; }).join("")
+      : '<div class="empty">まだ動作がありません。</div>') +
+    (state.picker ? '<div style="margin-top:.6rem"><div class="empty">足す動作を選ぶ</div><div class="mlist">' + allMoves().map(m => '<button type="button" class="mcard" data-pick="' + esc(m.id) + '">' + mini(m) + "<b>" + esc(m.name) + "</b></button>").join("") + '</div><button type="button" class="linkbtn" data-pick-x>やめる</button></div>'
+      : '<button type="button" class="btn ghost sm" data-padd style="margin-top:.5rem">+ 動作を足す</button>') + "</div></div>" +
+    '<div class="row"><button type="button" class="btn" data-msave>保存</button><button type="button" class="btn ghost" data-mcancel>やめる</button></div>';
+}
+function readMenu(mn){
+  const n = document.getElementById("mn-name"); if (n) mn.name = n.value.trim();
+  document.querySelectorAll("[data-it]").forEach(el => { const it = mn.items[+el.dataset.i]; if (!it) return; const k = el.dataset.it; it[k] = k === "mode" ? el.value : Math.max(k === "rest" ? 0 : 1, +el.value || 0); });
+}
+
+/* ───────── 動作:用意したもの・自分で作るもの ───────── */
+function renderMoves(){
+  const box = document.getElementById("moves");
+  if (state.editMove) { box.innerHTML = moveEditorHtml(state.editMove); return; }
+  const mine = (D() ? D().moves : []).filter(m => !m.deleted);
+  const card = m => '<button type="button" class="mcard" data-mopen="' + esc(m.id) + '">' + mini(m) + "<b>" + esc(m.name) + "</b><small>" + (m.view === "front" ? "正面" : "横向き") + "・1回 " + m.sec + "秒</small></button>";
+  box.innerHTML = "<h1>動作</h1>" + '<div class="panel"><div class="panel-h"><span>自分で作った動作</span><button type="button" class="linkbtn" data-mvnew>+ 新しく作る</button></div><div class="panel-b">' +
+    (mine.length ? '<div class="mlist">' + mine.map(card).join("") + "</div>" : '<div class="empty">まだありません。用意した動作を押して「これをもとに作る」からも作れます。</div>') + "</div></div>" +
+    '<div class="panel"><div class="panel-h"><span>用意した動作</span></div><div class="panel-b"><div class="mlist">' + BUILTIN.map(card).join("") + "</div></div></div>";
+}
+function moveEditorHtml(m){
+  const builtin = m.id && m.id.startsWith("b:");
+  const fr = m.frames[state.frame] || m.frames[0];
+  return "<h1>" + (builtin ? esc(m.name) : "動作を作る") + "</h1>" +
+    (builtin ? '<p class="empty">用意した動作は直せません。「これをもとに作る」で自分の動作として直せます。</p>' :
+      '<div class="grid2"><div class="f"><label>名前</label><input id="mv-name" value="' + esc(m.name) + '" placeholder="お尻のストレッチ"></div>' +
+      '<div class="f"><label>向き</label><select id="mv-view"><option value="side"' + (m.view !== "front" ? " selected" : "") + '>横向き</option><option value="front"' + (m.view === "front" ? " selected" : "") + ">正面</option></select></div>" +
+      '<div class="f"><label>1回にかける秒</label><input id="mv-sec" type="number" min="0.5" step="0.1" value="' + m.sec + '"></div>' +
+      '<div class="f"><label>地面へのつけ方</label><select id="mv-plant"><option value="feet"' + ((m.plant || {}).mode !== "pelvis" ? " selected" : "") + '>足を地面に</option><option value="pelvis"' + ((m.plant || {}).mode === "pelvis" ? " selected" : "") + ">寝た姿勢(腰を地面に)</option></select></div></div>") +
+    '<div class="row" style="margin:.5rem 0"><span class="status">ポーズ</span>' + m.frames.map((f, i) => '<button type="button" class="chip-b" data-frame="' + i + '" aria-pressed="' + (i === state.frame && !state.preview) + '">' + (i + 1) + "</button>").join("") +
+      (builtin ? "" : '<button type="button" class="chip-b" data-fadd>+ この形を写して足す</button>' + (m.frames.length > 1 ? '<button type="button" class="chip-b" data-fdel>このポーズを消す</button>' : "")) +
+      '<button type="button" class="chip-b" data-preview aria-pressed="' + state.preview + '">▶ 通して見る</button></div>' +
+    '<div id="mv-stage">' + (state.preview ? figureSvg(poseAt(m, 0), m.view, { id: "mv-fig" }) : figureSvg(plant(fr, m.plant), m.view, { id: "mv-fig", handles: !builtin })) + "</div>" +
+    (builtin || state.preview ? "" : '<p class="empty" style="font-size:.78rem">関節の丸をドラッグして形を作ります。赤い丸(腰)で全体を動かせます。保存するときに、足(寝た姿勢なら腰)を地面にそろえます。</p>') +
+    '<div class="row" style="margin-top:.6rem">' + (builtin ? '<button type="button" class="btn" data-mvcopy>これをもとに作る</button>' : '<button type="button" class="btn" data-mvsave>保存</button>') +
+      '<button type="button" class="btn ghost" data-mvclose>閉じる</button>' + (!builtin && (D().moves || []).some(x => x.id === m.id) ? '<button type="button" class="linkbtn" data-mvdel style="margin-left:auto;color:#B3283C">この動作を消す</button>' : "") + "</div>";
+}
+
+/* ───────── 再生 ───────── */
+function buildSegs(mn){
+  const segs = [], its = mn.items.filter(it => moveOf(it.move));
+  if (!its.length) return segs;
+  segs.push({ kind: "prep", dur: 5, next: its[0] });
+  its.forEach((it, i) => {
+    for (let s = 1; s <= it.sets; s++) {
+      segs.push({ kind: "move", it, set: s, dur: itemSec(it) });
+      const lastAll = i === its.length - 1 && s === it.sets;
+      const nextIt = s < it.sets ? it : its[i + 1];
+      if (!lastAll && (it.rest || 0) > 0) segs.push({ kind: "rest", dur: it.rest, next: nextIt, nextSet: s < it.sets ? s + 1 : 1 });
+    }
+  });
+  return segs;
+}
+function startPlay(mn){
+  const segs = buildSegs(mn); if (!segs.length) return say("このメニューには動作がありません。", true);
+  state.play = { mn, segs, i: 0, start: nowMs(), paused: null, total: segs.reduce((a, x) => a + x.dur, 0), said: {} };
+  try { if (navigator.wakeLock) navigator.wakeLock.request("screen").then(l => { state.play && (state.play.lock = l); }).catch(() => {}); } catch (e) {}
+  document.getElementById("player").hidden = false; enterSeg(); loop();
+}
+function segName(seg){ const m = moveOf((seg.kind === "move" ? seg.it : seg.next).move); return m ? m.name : ""; }
+function enterSeg(){
+  const pl = state.play, seg = pl.segs[pl.i]; pl.said = {};
+  if (seg.kind === "prep") speak("準備。最初は" + segName(seg) + "です");
+  else if (seg.kind === "move") speak(segName(seg) + "、" + seg.it.value + (seg.it.mode === "reps" ? "回" : "秒") + (seg.it.sets > 1 ? "、" + seg.set + "セット目" : ""));
+  else speak("休憩、" + seg.dur + "秒。次は" + segName(seg));
+  renderPlayer();
+}
+function elapsed(){ const pl = state.play; return ((pl.paused != null ? pl.paused : nowMs()) - pl.start) / 1000; }
+function renderPlayer(){
+  const pl = state.play, el = document.getElementById("player"); if (!pl) { el.hidden = true; el.innerHTML = ""; return; }
+  if (pl.done) {
+    el.className = "player"; el.innerHTML = '<div class="stage"><div class="now"><div class="nm">おつかれさまでした</div><div class="sub2">' + esc(pl.mn.name) + "・" + fmt(pl.total) + '</div></div></div><div class="ctl"><button type="button" class="main" data-pl="close" aria-label="閉じる">✓</button></div>';
+    return;
+  }
+  const seg = pl.segs[pl.i], m = moveOf((seg.kind === "move" ? seg.it : seg.next).move);
+  el.className = "player" + (seg.kind !== "move" ? " rest" : "");
+  const nxt = pl.segs.slice(pl.i + 1).find(x => x.kind === "move");
+  el.innerHTML = '<div class="top"><span>' + esc(pl.mn.name) + "</span><span>" + (pl.i + 1) + " / " + pl.segs.length + "</span></div>" +
+    '<div class="stage" id="pl-stage">' + figureSvg(poseAt(m, 0), m.view, { id: "pl-fig" }) + "</div>" +
+    '<div class="now"><div class="nm">' + (seg.kind === "prep" ? "準備" : seg.kind === "rest" ? "休憩" : esc(m.name)) + "</div>" +
+    '<div class="big" id="pl-big"></div><div class="sub2" id="pl-sub"></div><div class="bar"><i id="pl-bar" style="width:0%"></i></div>' +
+    '<div class="sub2">' + (seg.kind === "move" ? (nxt ? "次:" + esc(segName(nxt)) : "これで最後") : "次:" + esc(m.name) + (seg.kind === "rest" && seg.nextSet > 1 ? "(" + seg.nextSet + "セット目)" : "")) + "</div></div>" +
+    '<div class="ctl"><button type="button" data-pl="prev" aria-label="前へ">⏮</button><button type="button" class="main" data-pl="pause" aria-label="一時停止">' + (pl.paused != null ? "▶" : "⏸") + '</button><button type="button" data-pl="next" aria-label="次へ">⏭</button><button type="button" data-pl="stop" aria-label="やめる">✕</button></div>';
+  tickPlayer();
+}
+function tickPlayer(){
+  const pl = state.play; if (!pl || pl.done) return;
+  const seg = pl.segs[pl.i], t = elapsed(), m = moveOf((seg.kind === "move" ? seg.it : seg.next).move);
+  const fig = document.getElementById("pl-stage");
+  if (fig) fig.innerHTML = figureSvg(poseAt(m, seg.kind === "move" && !m.hold ? t / m.sec : (seg.kind === "move" ? 0 : t / (m.sec * 1.6))), m.view, { id: "pl-fig" });
+  const left = seg.dur - t, big = document.getElementById("pl-big"), sub = document.getElementById("pl-sub"), bar = document.getElementById("pl-bar");
+  if (seg.kind === "move" && seg.it.mode === "reps") {
+    const done = Math.min(seg.it.value, Math.floor(t / m.sec)), rem = seg.it.value - done;
+    if (big) big.textContent = "あと " + rem + " 回"; if (sub) sub.textContent = done + " / " + seg.it.value + " 回" + (seg.it.sets > 1 ? "・" + seg.set + "/" + seg.it.sets + "セット" : "");
+    if (rem === 3 && seg.it.value > 3 && !pl.said.r3) { pl.said.r3 = true; speak("あと3回"); }
+  } else {
+    if (big) big.textContent = fmt(Math.ceil(left)); if (sub) sub.textContent = seg.kind === "move" && seg.it.sets > 1 ? seg.set + "/" + seg.it.sets + "セット" : "";
+    if (left <= 3.05 && left > 0 && seg.dur > 4 && !pl.said.t3) { pl.said.t3 = true; speak("あと3秒"); }
+  }
+  if (bar) bar.style.width = Math.min(100, t / seg.dur * 100).toFixed(1) + "%";
+  if (pl.paused == null && t >= seg.dur) goSeg(pl.i + 1);
+}
+function goSeg(i){
+  const pl = state.play; if (!pl) return;
+  if (i >= pl.segs.length) { pl.done = true; speak("おつかれさまでした"); releaseLock(); renderPlayer();
+    commit(doc => { doc.runs = (doc.runs || []).concat([{ menu: pl.mn.id, date: today(), sec: Math.round(pl.total) }]).slice(-200); }); return; }
+  pl.i = Math.max(0, i); pl.start = nowMs(); if (pl.paused != null) pl.paused = pl.start; enterSeg();
+}
+function releaseLock(){ try { state.play && state.play.lock && state.play.lock.release(); } catch (e) {} }
+function loop(){ if (!state.play || state.play.done) return; tickPlayer(); state.raf = requestAnimationFrame(loop); }
+
+/* ───────── 動作を作る画面のアニメーションとドラッグ ───────── */
+function previewLoop(ts){
+  if (state.editMove && state.preview && state.view === "moves") { const st = document.getElementById("mv-stage"), m = state.editMove; if (st) st.innerHTML = figureSvg(poseAt(m, (nowMs() / 1000) / m.sec), m.view, { id: "mv-fig" }); }
+  requestAnimationFrame(previewLoop);
+}
+const PARENT = { S: ["P", "c"], E1: ["S", "d1"], W1: ["E1", "e1"], E2: ["S", "d2"], W2: ["E2", "e2"], K1: ["P", "f1"], A1: ["K1", "g1"], K2: ["P", "f2"], A2: ["K2", "g2"] };
+function svgPoint(svg, ev){ const pt = svg.createSVGPoint ? svg.createSVGPoint() : { x: 0, y: 0 }; pt.x = ev.clientX; pt.y = ev.clientY; const m = svg.getScreenCTM && svg.getScreenCTM(); const r = m && pt.matrixTransform ? pt.matrixTransform(m.inverse()) : pt; return [r.x, r.y]; }
+function dragTo(jk, pt){
+  const m = state.editMove, fr = m.frames[state.frame];
+  if (jk === "P") { const sh = plant(fr, m.plant), j = joints(sh); fr.px += pt[0] - j.P[0]; fr.py += pt[1] - j.P[1]; return; }
+  const [par, key] = PARENT[jk], j = joints(plant(fr, m.plant)), q = j[par];
+  fr[key] = Math.round(((Math.atan2(pt[0] - q[0], -(pt[1] - q[1])) * 180 / Math.PI) + 360) % 360);
+}
+function readMove(m){
+  const v = id => (document.getElementById(id) || {}).value;
+  if (document.getElementById("mv-name")) { m.name = (v("mv-name") || "").trim(); m.view = v("mv-view"); m.sec = Math.max(0.5, +v("mv-sec") || 2); m.plant = v("mv-plant") === "pelvis" ? { mode: "pelvis" } : {}; }
+}
+const clone = o => JSON.parse(JSON.stringify(o));
+
+/* ───────── 描画と操作 ───────── */
+function render(){ if (!D()) state.doc = emptyDoc(); renderMenus(); renderMoves(); }
+function show(v){
+  state.view = v;
+  document.querySelectorAll(".view").forEach(el => el.hidden = el.id !== "view-" + v);
+  document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.view === v)));
+}
+function bind(){
+  document.querySelectorAll("nav.tabs button").forEach(b => b.addEventListener("click", () => show(b.dataset.view)));
+  document.getElementById("menus").addEventListener("click", async e => {
+    const q = s => e.target.closest(s); let b;
+    if (q("[data-mnew]")) { state.editMenu = { id: uid(), name: "", items: [] }; state.picker = true; return renderMenus(); }
+    if ((b = q("[data-medit]"))) { state.editMenu = clone(D().menus.find(x => x.id === b.dataset.medit)); state.picker = false; return renderMenus(); }
+    if ((b = q("[data-mdel]"))) { if (!confirm("このメニューを消しますか。")) return; const id = b.dataset.mdel; return commit(doc => { doc.menus.find(x => x.id === id).deleted = today(); }); }
+    if ((b = q("[data-play]"))) { const mn = D().menus.find(x => x.id === b.dataset.play); return startPlay(mn); }
+    const mn = state.editMenu; if (!mn) return;
+    readMenu(mn);
+    if (q("[data-padd]")) { state.picker = true; return renderMenus(); }
+    if (q("[data-pick-x]")) { state.picker = false; return renderMenus(); }
+    if ((b = q("[data-pick]"))) { const m = moveOf(b.dataset.pick); mn.items.push({ move: m.id, mode: m.hold ? "time" : "reps", value: m.hold ? 30 : 10, sets: 1, rest: 15 }); state.picker = false; return renderMenus(); }
+    if ((b = q("[data-idel]"))) { mn.items.splice(+b.dataset.idel, 1); return renderMenus(); }
+    if ((b = q("[data-iup]"))) { const i = +b.dataset.iup; if (i > 0) [mn.items[i - 1], mn.items[i]] = [mn.items[i], mn.items[i - 1]]; return renderMenus(); }
+    if ((b = q("[data-idown]"))) { const i = +b.dataset.idown; if (i < mn.items.length - 1) [mn.items[i + 1], mn.items[i]] = [mn.items[i], mn.items[i + 1]]; return renderMenus(); }
+    if (q("[data-mcancel]")) { state.editMenu = null; return renderMenus(); }
+    if (q("[data-msave]")) {
+      if (!mn.name) return say("名前を入れてください。", true);
+      if (!mn.items.length) return say("動作を1つ以上足してください。", true);
+      state.editMenu = null; say("保存しました");
+      return commit(doc => { const i = doc.menus.findIndex(x => x.id === mn.id); if (i >= 0) doc.menus[i] = mn; else doc.menus.push(mn); });
+    }
+  });
+  document.getElementById("menus").addEventListener("change", e => { if (state.editMenu && e.target.closest("[data-it]")) { readMenu(state.editMenu); renderMenus(); } });
+  document.getElementById("moves").addEventListener("click", async e => {
+    const q = s => e.target.closest(s); let b;
+    if ((b = q("[data-mopen]"))) { state.editMove = clone(moveOf(b.dataset.mopen)); state.frame = 0; state.preview = true; return renderMoves(); }
+    if (q("[data-mvnew]")) { state.editMove = { id: "c:" + uid(), name: "", view: "side", sec: 2.5, plant: {}, frames: [clone(ST), Object.assign(clone(ST), { d1: 90, e1: 90, d2: 90, e2: 90 })] }; state.frame = 0; state.preview = false; return renderMoves(); }
+    const m = state.editMove; if (!m) return;
+    readMove(m);
+    if (q("[data-mvclose]")) { state.editMove = null; return renderMoves(); }
+    if (q("[data-mvcopy]")) { const c = clone(m); c.id = "c:" + uid(); c.name = m.name + "(自分用)"; delete c.hold; state.editMove = c; state.frame = 0; state.preview = false; return renderMoves(); }
+    if ((b = q("[data-frame]"))) { state.frame = +b.dataset.frame; state.preview = false; return renderMoves(); }
+    if (q("[data-preview]")) { state.preview = !state.preview; return renderMoves(); }
+    if (q("[data-fadd]")) { m.frames.splice(state.frame + 1, 0, clone(m.frames[state.frame])); state.frame++; state.preview = false; return renderMoves(); }
+    if (q("[data-fdel]")) { if (m.frames.length > 1) { m.frames.splice(state.frame, 1); state.frame = Math.max(0, state.frame - 1); } return renderMoves(); }
+    if (q("[data-mvdel]")) { if (!confirm("この動作を消しますか。")) return; const id = m.id; state.editMove = null; return commit(doc => { doc.moves.find(x => x.id === id).deleted = today(); }); }
+    if (q("[data-mvsave]")) {
+      if (!m.name) return say("名前を入れてください。", true);
+      const keep = clone(m); state.editMove = null; say("保存しました");
+      return commit(doc => { const i = doc.moves.findIndex(x => x.id === keep.id); if (i >= 0) doc.moves[i] = keep; else doc.moves.push(keep); });
+    }
+  });
+  // 関節をドラッグ
+  let drag = null;
+  document.getElementById("moves").addEventListener("pointerdown", e => { const h = e.target.closest(".h"); if (!h || !state.editMove || state.preview) return; drag = h.dataset.j; e.preventDefault(); });
+  document.addEventListener("pointermove", e => { if (!drag) return; const svg = document.getElementById("mv-fig"); if (!svg) return; dragTo(drag, svgPoint(svg, e));
+    const m = state.editMove; document.getElementById("mv-stage").innerHTML = figureSvg(plant(m.frames[state.frame], m.plant), m.view, { id: "mv-fig", handles: true }); });
+  document.addEventListener("pointerup", () => { drag = null; });
+  document.getElementById("player").addEventListener("click", e => {
+    const b = e.target.closest("[data-pl]"); if (!b || !state.play) return;
+    const pl = state.play, k = b.dataset.pl;
+    if (k === "pause") { if (pl.paused != null) { pl.start += nowMs() - pl.paused; pl.paused = null; speak("再開"); } else { pl.paused = nowMs(); } return renderPlayer(); }
+    if (k === "next") return goSeg(pl.i + 1);
+    if (k === "prev") return goSeg(pl.i - 1);
+    if (k === "stop") { if (!confirm("やめますか。")) return; try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (err) {} releaseLock(); state.play = null; return renderPlayer(); }
+    if (k === "close") { state.play = null; return renderPlayer(); }
+  });
+  // 設定
+  const v = voice(); document.getElementById("voice-on").checked = v.on; document.getElementById("voice-rate").value = v.rate;
+  document.getElementById("voice-on").addEventListener("change", e => lsSet(KEY_VOICE, Object.assign(voice(), { on: e.target.checked })));
+  document.getElementById("voice-rate").addEventListener("change", e => lsSet(KEY_VOICE, Object.assign(voice(), { rate: +e.target.value })));
+  document.getElementById("voice-test").addEventListener("click", () => speak("次はスクワット、10回。あと3秒"));
+  document.getElementById("connect").addEventListener("click", async () => {
+    const g = id => document.getElementById(id).value.trim();
+    state.conn = { owner: g("c-owner"), repo: g("c-repo"), branch: g("c-branch") || "main", token: g("c-token") };
+    lsSet(KEY_CONN, state.conn); document.getElementById("conn-status").textContent = (await load()) ? "読み込みました" : "";
+  });
+}
+function boot(){
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
+  bind();
+  document.getElementById("ver").textContent = "版 " + APP_VERSION;
+  const c = lsGet(KEY_CONN, null) || lsGet("roadmap-conn", null) || lsGet("sho-conn", null) || lsGet("shian-conn", null) || lsGet("mr-conn", null);
+  document.getElementById("c-owner").value = c ? c.owner : "nisenonamae";
+  document.getElementById("c-repo").value = c ? c.repo : "notion-daily";
+  document.getElementById("c-branch").value = c ? (c.branch || "main") : "main";
+  document.getElementById("c-token").value = c ? c.token : "";
+  const cache = lsGet(KEY_CACHE, null);
+  state.doc = cache && cache.doc ? Object.assign(emptyDoc(), cache.doc) : emptyDoc(); state.sha = cache ? cache.sha : null;
+  render();
+  if (c && c.token) { state.conn = c; load(); }
+  requestAnimationFrame(previewLoop);
+}
+window.__tn = { figureSvg, state, BUILTIN, poseAt, plant, joints, buildSegs, tickPlayer, goSeg, menuSec, dragTo };
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
+})();
+</script>
+</body>
+</html>
