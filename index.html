@@ -34,7 +34,8 @@ h1{font-size:1.2rem;margin:0 0 .8rem;letter-spacing:.1em}
 .fig .bone{stroke:var(--ink);stroke-width:10;stroke-linecap:round;fill:none}
 .fig .far{stroke:#A8A093}.fig .headc{fill:var(--ink)}.fig .ground{stroke:var(--rule);stroke-width:2}
 .fig .h{fill:#fff;stroke:var(--acc);stroke-width:2.5;cursor:grab}.fig .h.root{stroke:#B3283C}
-.fig .eye{fill:#fff}.tline{display:flex;flex-wrap:wrap;align-items:center;gap:.2rem}.tline .tarrow{font-size:.72rem;color:var(--sub)}.tline .endb{font-size:.7rem;padding:.05rem .45rem}.tline small{font-size:.66rem;color:inherit;opacity:.8}.fig .h.hd{fill:transparent}.fig .knobl{stroke:#8A6FB0;stroke-width:1.2;stroke-dasharray:3 3}.fig .pbox{fill:#D9D0BE;stroke:#C9BFAB;stroke-width:.8}.fig .gplane{fill:#EFEBE2;stroke:none}.fig .h.small{stroke:#8A6FB0}
+.fig .eye{fill:#fff}.tline{display:flex;flex-wrap:wrap;align-items:center;gap:.2rem}.tline .tarrow{font-size:.72rem;color:var(--sub)}.fig .band{fill:none;stroke:#E0574A;stroke-linejoin:round;opacity:.92}.bandrow{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;margin-top:.45rem;font-size:.8rem}.bandrow select{max-width:9.5rem}
+.tline .endb{font-size:.7rem;padding:.05rem .45rem}.tline small{font-size:.66rem;color:inherit;opacity:.8}.fig .h.hd{fill:transparent}.fig .knobl{stroke:#8A6FB0;stroke-width:1.2;stroke-dasharray:3 3}.fig .pbox{fill:#D9D0BE;stroke:#C9BFAB;stroke-width:.8}.fig .gplane{fill:#EFEBE2;stroke:none}.fig .h.small{stroke:#8A6FB0}
 .camr{display:flex;align-items:center;gap:.4rem;font-size:.78rem;color:var(--sub);margin-top:.35rem}.camr input{flex:1}
 .wrap:has(.mv-ed){max-width:1120px}
 .mv-ed{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(16rem,1fr);gap:1rem;align-items:start}
@@ -99,7 +100,7 @@ nav.tabs button[aria-selected="true"]{color:var(--ink);box-shadow:inset 0 3px 0 
 <script>
 (function(){
 "use strict";
-const APP_VERSION = "2026-10-07 r8";
+const APP_VERSION = "2026-10-07 r9";
 const DATA = "roadmap/apps/tanren/data.json";
 const KEY_CONN = "tn-conn", KEY_CACHE = "tn-cache", KEY_VOICE = "tn-voice";
 const state = { conn: null, doc: null, sha: null, view: "menus", editMenu: null, picker: false, editMove: null, frame: 0, preview: true, play: null };
@@ -224,6 +225,25 @@ const HANDLES = ["P", "M", "S", "H", "E1", "W1", "E2", "W2", "K1", "A1", "K2", "
 const SHOWN = ["P", "M", "S", "H", "L2", "Q2", "E1", "W1", "E2", "W2", "K1", "A1", "K2", "A2", "T1", "T2"];      // 肩・腰の線のつまみは片側だけ(反対側も一緒に回る)
 const KNOB = 26;     // 肩・股の線を回すつまみは、付け根からこの長さの所に出す
 const knobPos = (p, j, k) => /^[LQ]/.test(k) ? v3.add(j[BONE[k][1]], v3.mul(p.d[k], KNOB)) : j[k];
+// エクササイズバンド:体の2か所に巻き、体と一緒に動く。伸びるほど細く描く
+const ANCHORS = { F1: "右もも(ひざの上)", F2: "左もも(ひざの上)", K1: "右ひざ", K2: "左ひざ", A1: "右足首", A2: "左足首", W1: "右手首", W2: "左手首", E1: "右ひじ", E2: "左ひじ" };
+function anchorPos(j, k){
+  if (k === "F1") return v3.add(j.Q1, v3.mul(v3.sub(j.K1, j.Q1), 0.78));
+  if (k === "F2") return v3.add(j.Q2, v3.mul(v3.sub(j.K2, j.Q2), 0.78));
+  return j[k];
+}
+function bandRest(m){ if (m.__bandRest) return m.__bandRest; const j = joints(place(m.frames[0], m)); return (m.__bandRest = (m.bands || []).map(b => v3.len(v3.sub(anchorPos(j, b.a), anchorPos(j, b.b))) || 1)); }
+function bandSvg(j, cam, b, rest){
+  const a = scr(anchorPos(j, b.a), cam), c = scr(anchorPos(j, b.b), cam);
+  const dist = v3.len(v3.sub(anchorPos(j, b.a), anchorPos(j, b.b))), stretch = Math.max(0, dist - rest) / rest;
+  const w = Math.max(1.4, 4 - 2.4 * Math.min(1, stretch)), rr = 8.5;
+  const dx = c[0] - a[0], dy = c[1] - a[1], L = Math.hypot(dx, dy) || 1, nx = -dy / L * rr, ny = dx / L * rr;
+  // 2つの点をぐるっと囲む輪(手前と奥の2本の帯に見える)
+  const d = "M" + (a[0] + nx).toFixed(1) + " " + (a[1] + ny).toFixed(1) + " L" + (c[0] + nx).toFixed(1) + " " + (c[1] + ny).toFixed(1) +
+    " A" + rr + " " + rr + " 0 0 0 " + (c[0] - nx).toFixed(1) + " " + (c[1] - ny).toFixed(1) + " L" + (a[0] - nx).toFixed(1) + " " + (a[1] - ny).toFixed(1) +
+    " A" + rr + " " + rr + " 0 0 0 " + (a[0] + nx).toFixed(1) + " " + (a[1] + ny).toFixed(1) + " Z";
+  return '<path class="band" d="' + d + '" stroke-width="' + w.toFixed(2) + '"/>';
+}
 // 前を向いているか後ろかが分かるように、頭に目を描く(1=右半身。前 = 上向き × 右)
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 function facing(p){
@@ -258,6 +278,7 @@ function figureSvg(p, cam, opts){
     const far = it.dep < mid - 4 ? " far" : "";
     h += '<line class="bone' + far + '" x1="' + it.a[0].toFixed(1) + '" y1="' + it.a[1].toFixed(1) + '" x2="' + it.z[0].toFixed(1) + '" y2="' + it.z[1].toFixed(1) + '"/>';
   }
+  if (opts.bands && opts.bands.length) { const rest = opts.bandRest || []; h += opts.bands.map((b, i) => bandSvg(j, cam, b, rest[i] || 1)).join(""); }
   if (opts.fit) h += "</g>";
   if (opts.handles) {
     const pins = opts.pins || {};
@@ -379,7 +400,7 @@ const CLAM = (() => {
     Q2: [0, 1, 0], K2: v3.norm([0.7, -0.2, 0.7]), A2: v3.norm([0.7, -0.05, -0.7]), T2: v3.norm([0.4, 0, -0.9]) } };
   const rest = plant(base, { mode: "lowest" }), j = joints(rest);
   const open = clone(rest); open.d.K2 = v3.norm([0.5, 0.75, 0.45]);
-  return { id: "b:clam", name: "クラムシェル", v3: true, sec: 3, cam: { yaw: 0, pitch: 18 }, pins: { P: j.P, A2: j.A2 }, props: [{ type: "mat", x: -110, y: 0, z: 0, w: 220, d: 90 }], frames: [rest, open] };
+  return { id: "b:clam", name: "クラムシェル", v3: true, sec: 3, cam: { yaw: 0, pitch: 18 }, pins: { P: j.P, A2: j.A2 }, bands: [{ a: "F1", b: "F2" }], props: [{ type: "mat", x: -110, y: 0, z: 0, w: 220, d: 90 }], frames: [rest, open] };
 })();
 const BUILTIN = BUILTIN2D.map(to3D).concat([CLAM]);
 const D = () => state.doc;
@@ -434,7 +455,7 @@ function speak(text){
 const fmt = sec => { sec = Math.max(0, Math.round(sec)); return Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0"); };
 const itemSec = it => { const m = moveOf(it.move); return m ? (it.mode === "reps" ? it.value * cycleSec(m) : it.value) : 0; };
 const menuSec = mn => mn.items.reduce((a, it, i) => a + itemSec(it) * it.sets + (it.rest || 0) * (it.sets - (i === mn.items.length - 1 ? 1 : 0)), 0);
-const mini = (m, cls) => { const p = poseAt(m, 0.25); return figureSvg(p, m.cam, { props: m.props, fit: fitOf(m) }).replace('class="fig"', 'class="fig' + (cls ? " " + cls : "") + '"'); };
+const mini = (m, cls) => { const p = poseAt(m, 0.25); return figureSvg(p, m.cam, { props: m.props, fit: fitOf(m), bands: m.bands, bandRest: bandRest(m) }).replace('class="fig"', 'class="fig' + (cls ? " " + cls : "") + '"'); };
 function renderMenus(){
   const box = document.getElementById("menus");
   if (state.editMenu) { box.innerHTML = menuEditorHtml(state.editMenu); return; }
@@ -503,7 +524,10 @@ function moveEditorHtml(m){
     (builtin || state.preview ? "" : sec("固定と物", '<button type="button" class="chip-b" data-pinmode aria-pressed="' + !!state.pinMode + '">📌 固定する関節を選ぶ</button>' +
       (Object.keys(m.pins || {}).length ? '<div class="empty" style="font-size:.76rem;margin-top:.2rem">固定:' + Object.keys(m.pins).map(k => JNAME[k] || k).join("・") + "</div>" : "") +
       '<div style="margin-top:.4rem"><select id="mv-prop-type"><option value="">物を置く…</option>' + Object.entries(PROPS).map(([k, v]) => '<option value="' + k + '">' + v + "</option>").join("") + "</select></div>" +
-      ((m.props || []).length ? '<div class="chips" style="margin-top:.3rem">' + m.props.map((o, i) => '<span class="chip-b">' + PROPS[o.type] + ' <button type="button" class="linkbtn" data-prop-del="' + i + '" aria-label="外す">✕</button></span>').join("") + "</div>" : ""))) +
+      ((m.props || []).length ? '<div class="chips" style="margin-top:.3rem">' + m.props.map((o, i) => '<span class="chip-b">' + PROPS[o.type] + ' <button type="button" class="linkbtn" data-prop-del="' + i + '" aria-label="外す">✕</button></span>').join("") + "</div>" : "") +
+      '<div class="bandrow"><span class="status">バンド</span><select id="bd-a">' + Object.entries(ANCHORS).map(([k, v]) => '<option value="' + k + '">' + v + "</option>").join("") + '</select><span>と</span><select id="bd-b">' +
+        Object.entries(ANCHORS).map(([k, v]) => '<option value="' + k + '"' + (k === "F2" ? " selected" : "") + ">" + v + "</option>").join("") + '</select><button type="button" class="chip-b" data-band-add>巻く</button></div>' +
+      ((m.bands || []).length ? '<div class="chips" style="margin-top:.3rem">' + m.bands.map((b, i) => '<span class="chip-b">バンド ' + ANCHORS[b.a] + "〜" + ANCHORS[b.b] + ' <button type="button" class="linkbtn" data-band-del="' + i + '" aria-label="外す">✕</button></span>').join("") + "</div>" : ""))) +
     '<div class="row" style="margin-top:.7rem">' + (builtin ? '<button type="button" class="btn" data-mvcopy>これをもとに作る</button>' : '<button type="button" class="btn" data-mvsave>保存</button>') +
       '<button type="button" class="btn ghost" data-mvclose>閉じる</button></div>' +
     (!builtin && (D().moves || []).some(x => x.id === m.id) ? '<div style="margin-top:.6rem"><button type="button" class="linkbtn" data-mvdel style="color:#B3283C">この動作を消す</button></div>' : "") + "</div>";
@@ -552,7 +576,7 @@ function renderPlayer(){
   el.className = "player" + (seg.kind !== "move" ? " rest" : "");
   const nxt = pl.segs.slice(pl.i + 1).find(x => x.kind === "move");
   el.innerHTML = '<div class="top"><span>' + esc(pl.mn.name) + "</span><span>" + (pl.i + 1) + " / " + pl.segs.length + "</span></div>" +
-    '<div class="stage" id="pl-stage">' + figureSvg(poseAt(m, 0), m.cam, { id: "pl-fig", props: m.props, fit: fitOf(m) }) + "</div>" +
+    '<div class="stage" id="pl-stage">' + figureSvg(poseAt(m, 0), m.cam, { id: "pl-fig", props: m.props, fit: fitOf(m), bands: m.bands, bandRest: bandRest(m) }) + "</div>" +
     '<div class="now"><div class="nm">' + (seg.kind === "prep" ? "準備" : seg.kind === "rest" ? "休憩" : esc(m.name)) + "</div>" +
     '<div class="big" id="pl-big"></div><div class="sub2" id="pl-sub"></div><div class="bar"><i id="pl-bar" style="width:0%"></i></div>' +
     '<div class="sub2">' + (seg.kind === "move" ? (nxt ? "次:" + esc(segName(nxt)) : "これで最後") : "次:" + esc(m.name) + (seg.kind === "rest" && seg.nextSet > 1 ? "(" + seg.nextSet + "セット目)" : "")) + "</div></div>" +
@@ -563,7 +587,7 @@ function tickPlayer(){
   const pl = state.play; if (!pl || pl.done) return;
   const seg = pl.segs[pl.i], t = elapsed(), m = moveOf((seg.kind === "move" ? seg.it : seg.next).move);
   const fig = document.getElementById("pl-stage");
-  if (fig) fig.innerHTML = figureSvg(seg.kind === "move" ? (m.hold ? poseAt(m, 0) : poseAtSec(m, t, m.noReturn && seg.it.mode !== "reps")) : poseAtSec(m, t / 1.6), m.cam, { id: "pl-fig", props: m.props, fit: m.__fit || (m.__fit = fitOf(m)) });
+  if (fig) fig.innerHTML = figureSvg(seg.kind === "move" ? (m.hold ? poseAt(m, 0) : poseAtSec(m, t, m.noReturn && seg.it.mode !== "reps")) : poseAtSec(m, t / 1.6), m.cam, { id: "pl-fig", props: m.props, fit: m.__fit || (m.__fit = fitOf(m)), bands: m.bands, bandRest: bandRest(m) });
   const left = seg.dur - t, big = document.getElementById("pl-big"), sub = document.getElementById("pl-sub"), bar = document.getElementById("pl-bar");
   if (seg.kind === "move" && seg.it.mode === "reps") {
     const done = Math.min(seg.it.value, Math.floor(t / cycleSec(m))), rem = seg.it.value - done;
@@ -587,7 +611,7 @@ function loop(){ if (!state.play || state.play.done) return; tickPlayer(); state
 
 /* ───────── 動作を作る画面のアニメーションとドラッグ ───────── */
 function previewLoop(ts){
-  if (state.editMove && state.preview && state.view === "moves") { const st = document.getElementById("mv-stage"), m = state.editMove; if (st) st.innerHTML = figureSvg(poseAtSec(m, nowMs() / 1000), m.cam, { id: "mv-fig", props: m.props }); }
+  if (state.editMove && state.preview && state.view === "moves") { const st = document.getElementById("mv-stage"), m = state.editMove; if (st) st.innerHTML = figureSvg(poseAtSec(m, nowMs() / 1000), m.cam, { id: "mv-fig", props: m.props, bands: m.bands, bandRest: bandRest(m) }); }
   requestAnimationFrame(previewLoop);
 }
 function svgPoint(svg, ev){ const pt = svg.createSVGPoint ? svg.createSVGPoint() : { x: 0, y: 0 }; pt.x = ev.clientX; pt.y = ev.clientY; const m = svg.getScreenCTM && svg.getScreenCTM(); const r = m && pt.matrixTransform ? pt.matrixTransform(m.inverse()) : pt; return [r.x, r.y]; }
@@ -613,7 +637,9 @@ function togglePin(jk){
 }
 function editStage(m){
   const builtin = m.id && m.id.startsWith("b:"), fr = m.frames[state.frame] || m.frames[0];
-  return state.preview ? figureSvg(poseAt(m, 0), m.cam, { id: "mv-fig", props: m.props }) : figureSvg(place(fr, m), m.cam, { id: "mv-fig", handles: !builtin, pins: m.pins, props: m.props });
+  delete m.__bandRest;
+  return state.preview ? figureSvg(poseAt(m, 0), m.cam, { id: "mv-fig", props: m.props, bands: m.bands, bandRest: bandRest(m) })
+    : figureSvg(place(fr, m), m.cam, { id: "mv-fig", handles: !builtin, pins: m.pins, props: m.props, bands: m.bands, bandRest: bandRest(m) });
 }
 function readMove(m){
   const v = id => (document.getElementById(id) || {}).value;
@@ -687,6 +713,10 @@ function bind(){
     if (q("[data-noret]")) { m.noReturn = !m.noReturn; if (m.frames.length > 1) m.sec = Math.round(timing(m).total * 100) / 100; return renderMoves(); }
     if ((b = q("[data-cam]"))) { const [y, p] = b.dataset.cam.split(":").map(Number); m.cam = { yaw: y, pitch: p }; return renderMoves(); }
     if ((b = q("[data-prop-del]"))) { m.props.splice(+b.dataset.propDel, 1); return renderMoves(); }
+    if (q("[data-band-add]")) { const a = document.getElementById("bd-a").value, c = document.getElementById("bd-b").value;
+      if (a === c) return say("違う2か所を選んでください。", true);
+      m.bands = (m.bands || []).concat([{ a, b: c }]); delete m.__bandRest; say(""); return renderMoves(); }
+    if ((b = q("[data-band-del]"))) { m.bands.splice(+b.dataset.bandDel, 1); delete m.__bandRest; return renderMoves(); }
     if (q("[data-fadd]")) { const T = timing(m); m.trans = T.tr.slice(); m.holds = T.ho.slice();
       m.frames.splice(state.frame + 1, 0, clone(m.frames[state.frame])); m.trans.splice(state.frame + 1, 0, T.tr[state.frame]); m.holds.splice(state.frame + 1, 0, 0);
       m.sec = timing(m).total; state.frame++; state.preview = false; return renderMoves(); }
@@ -695,7 +725,7 @@ function bind(){
     if (q("[data-mvdel]")) { if (!confirm("この動作を消しますか。")) return; const id = m.id; state.editMove = null; return commit(doc => { doc.moves.find(x => x.id === id).deleted = today(); }); }
     if (q("[data-mvsave]")) {
       if (!m.name) return say("名前を入れてください。", true);
-      const keep = clone(m); delete keep.__fit; const was = (D().moves || []).some(x => x.id === keep.id);
+      const keep = clone(m); delete keep.__fit; delete keep.__bandRest; const was = (D().moves || []).some(x => x.id === keep.id);
       const used = (D().menus || []).filter(mn => !mn.deleted && mn.items.some(it => it.move === keep.id)).length;
       state.editMove = null; say(was ? "直しました" + (used ? "(この動作を使っている " + used + " つのメニューにも反映されます)" : "") : "保存しました");
       return commit(doc => { const i = doc.moves.findIndex(x => x.id === keep.id); if (i >= 0) doc.moves[i] = keep; else doc.moves.push(keep); });
@@ -750,7 +780,7 @@ function boot(){
   if (c && c.token) { state.conn = c; load(); }
   requestAnimationFrame(previewLoop);
 }
-window.__tn = { timing, cycleSec, poseAtSec, fitOf, figureSvg, state, BUILTIN, poseAt, plant, place, joints, togglePin, toCam, fromCam, v3, buildSegs, tickPlayer, goSeg, menuSec, dragTo };
+window.__tn = { bandRest, anchorPos, timing, cycleSec, poseAtSec, fitOf, figureSvg, state, BUILTIN, poseAt, plant, place, joints, togglePin, toCam, fromCam, v3, buildSegs, tickPlayer, goSeg, menuSec, dragTo };
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 })();
 </script>
