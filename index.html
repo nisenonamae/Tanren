@@ -81,6 +81,13 @@ nav.tabs button[aria-selected="true"]{color:var(--ink);box-shadow:inset 0 3px 0 
       <label class="row"><input type="checkbox" id="voice-on"> 声で案内する(次の動作・あと3秒・休憩)</label>
       <div class="row" style="margin-top:.4rem"><span class="status">速さ</span><input type="range" id="voice-rate" min="0.7" max="1.5" step="0.1" style="flex:1"><button class="btn ghost sm" type="button" id="voice-test">試しに話す</button></div>
     </div></div>
+    <div class="panel"><div class="panel-h">まとめて入れる</div><div class="panel-b">
+      <p class="empty" style="margin-top:0">Claude からもらったファイル(.json)を選ぶか、中身を貼り付けて「読み込む」。動作とメニューを一度に入れられる。同じ名前の物は上書きする。</p>
+      <input type="file" id="pk-file" accept=".json,application/json,text/plain">
+      <textarea id="pk-in" rows="4" style="width:100%;margin-top:.4rem" placeholder="{ &quot;tanren&quot;: &quot;pack&quot;, &quot;moves&quot;: [ … ], &quot;menus&quot;: [ … ] }"></textarea>
+      <div class="row" style="margin-top:.4rem"><button class="btn ghost sm" type="button" id="pk-read">読み込む</button></div>
+      <div id="pk-prev"></div>
+    </div></div>
     <div class="panel"><div class="panel-h">接続</div><div class="panel-b">
       <p class="empty" style="margin-top:0">行軍表・省アプリと同じトークンが使えます(同じ端末で入れてあれば自動で使います)。</p>
       <div class="grid2"><div class="f"><label>ユーザー名</label><input id="c-owner"></div><div class="f"><label>リポジトリ</label><input id="c-repo"></div><div class="f"><label>ブランチ</label><input id="c-branch"></div></div>
@@ -100,7 +107,7 @@ nav.tabs button[aria-selected="true"]{color:var(--ink);box-shadow:inset 0 3px 0 
 <script>
 (function(){
 "use strict";
-const APP_VERSION = "2026-10-07 r9";
+const APP_VERSION = "2026-10-27 r10";
 const DATA = "roadmap/apps/tanren/data.json";
 const KEY_CONN = "tn-conn", KEY_CACHE = "tn-cache", KEY_VOICE = "tn-voice";
 const state = { conn: null, doc: null, sha: null, view: "menus", editMenu: null, picker: false, editMove: null, frame: 0, preview: true, play: null };
@@ -655,12 +662,56 @@ function readMove(m){
 
 /* ───────── 描画と操作 ───────── */
 function render(){ if (!D()) state.doc = emptyDoc(); renderMenus(); renderMoves(); }
+
+/* ───────── まとめて入れる ─────────
+   形式:{ "tanren": "pack", "moves": [ { name, view:"side"|"front", sec, hold, plant, frames:[ 体の角度(足りない所はまっすぐ立った形) ], note } ],
+          "menus": [ { name, items: [ { move: 動作の名前, mode: "reps"|"sec", value, sets, rest } ] } ] } */
+let pack = null;
+function packParse(text){
+  let j; try { j = JSON.parse(String(text || "").trim()); } catch (e) { return { err: "読めませんでした(形式が崩れています):" + e.message }; }
+  const moves = (j.moves || []).filter(m => m && m.name && Array.isArray(m.frames) && m.frames.length).map(m => ({
+    name: String(m.name), view: m.view === "front" ? "front" : "side", sec: +m.sec > 0 ? +m.sec : 3, hold: !!m.hold, plant: m.plant && typeof m.plant === "object" ? m.plant : {},
+    frames: m.frames.map(f => P_(f || {})), ...(m.note ? { note: String(m.note) } : {}) }));
+  const menus = (j.menus || []).filter(mn => mn && mn.name && Array.isArray(mn.items)).map(mn => ({ name: String(mn.name), items: mn.items.map(it => ({
+    move: String(it.move || ""), mode: it.mode === "sec" ? "sec" : "reps", value: +it.value > 0 ? +it.value : (it.mode === "sec" ? 30 : 10), sets: Math.max(1, +it.sets || 1), rest: Math.max(0, +it.rest || 0) })) }));
+  if (!moves.length && !menus.length) return { err: "動作もメニューも入っていません" };
+  const known = new Set(allMoves().map(m => m.name).concat(moves.map(m => m.name)));
+  const missing = [...new Set(menus.flatMap(mn => mn.items.map(it => it.move)).filter(n => !known.has(n)))];
+  const userMoves = D() ? D().moves.filter(m => !m.deleted) : [], userMenus = D() ? D().menus.filter(m => !m.deleted) : [];
+  return { moves, menus, missing, overMoves: moves.filter(m => userMoves.some(x => x.name === m.name)).length, overMenus: menus.filter(m => userMenus.some(x => x.name === m.name)).length };
+}
+function packPrevHtml(){
+  if (!pack) return ""; if (pack.err) return '<p class="empty" style="color:var(--warn,#c66)">' + esc(pack.err) + "</p>";
+  return '<p style="margin:.5rem 0 .2rem">動作 ' + pack.moves.length + "(上書き " + pack.overMoves + ") ・ メニュー " + pack.menus.length + "(上書き " + pack.overMenus + ")</p>" +
+    '<p class="empty" style="margin:0">' + esc(pack.moves.map(m => m.name).concat(pack.menus.map(m => "メニュー:" + m.name)).join("、")) + "</p>" +
+    (pack.missing.length ? '<p class="empty" style="color:var(--warn,#c66)">見つからない動作:' + esc(pack.missing.join("、")) + "(メニューから外して入れる)</p>" : "") +
+    '<div class="row" style="margin-top:.4rem"><button class="btn sm" type="button" id="pk-go">まとめて入れる</button></div>';
+}
+async function packApply(){
+  const pk = pack; if (!pk || pk.err) return;
+  await commit(doc => {
+    pk.moves.forEach(m => { const ex = doc.moves.find(x => !x.deleted && x.name === m.name);
+      const m3 = to3D(clone(m));   // 自分の動作は立体の形で持つので、読み込むときに読み替える
+      if (ex) { Object.keys(ex).forEach(k => { if (k !== "id") delete ex[k]; }); Object.assign(ex, m3, { id: ex.id }); }
+      else doc.moves.push(Object.assign({}, m3, { id: "u:" + uid() })); });
+    const byNameMove = n => { const u = doc.moves.find(x => !x.deleted && x.name === n); if (u) return u.id; const b = BUILTIN.find(x => x.name === n); return b ? b.id : null; };
+    pk.menus.forEach(mn => { const items = mn.items.map(it => Object.assign({}, it, { move: byNameMove(it.move) })).filter(it => it.move);
+      const ex = doc.menus.find(x => !x.deleted && x.name === mn.name);
+      if (ex) ex.items = items; else doc.menus.push({ id: "mn:" + uid(), name: mn.name, items }); });
+  });
+  say("動作 " + pk.moves.length + "・メニュー " + pk.menus.length + " を入れました。");
+  pack = null; document.getElementById("pk-prev").innerHTML = ""; const ta = document.getElementById("pk-in"); if (ta) ta.value = ""; const fi = document.getElementById("pk-file"); if (fi) fi.value = "";
+}
 function show(v){
   state.view = v;
   document.querySelectorAll(".view").forEach(el => el.hidden = el.id !== "view-" + v);
   document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.view === v)));
 }
 function bind(){
+  const pkShow = t => { pack = packParse(t); document.getElementById("pk-prev").innerHTML = packPrevHtml(); };
+  document.getElementById("pk-file").addEventListener("change", e => { const f = e.target.files[0]; if (!f) return; const rd = new FileReader(); rd.onload = () => { document.getElementById("pk-in").value = rd.result; pkShow(rd.result); }; rd.readAsText(f); });
+  document.getElementById("pk-read").addEventListener("click", () => pkShow(document.getElementById("pk-in").value));
+  document.getElementById("pk-prev").addEventListener("click", e => { if (e.target.id === "pk-go") packApply(); });
   document.querySelectorAll("nav.tabs button").forEach(b => b.addEventListener("click", () => show(b.dataset.view)));
   document.getElementById("menus").addEventListener("click", async e => {
     const q = s => e.target.closest(s); let b;
