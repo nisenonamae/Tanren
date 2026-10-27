@@ -107,7 +107,7 @@ nav.tabs button[aria-selected="true"]{color:var(--ink);box-shadow:inset 0 3px 0 
 <script>
 (function(){
 "use strict";
-const APP_VERSION = "2026-10-27 r10";
+const APP_VERSION = "2026-10-27 r11";
 const DATA = "roadmap/apps/tanren/data.json";
 const KEY_CONN = "tn-conn", KEY_CACHE = "tn-cache", KEY_VOICE = "tn-voice";
 const state = { conn: null, doc: null, sha: null, view: "menus", editMenu: null, picker: false, editMove: null, frame: 0, preview: true, play: null };
@@ -669,11 +669,17 @@ function render(){ if (!D()) state.doc = emptyDoc(); renderMenus(); renderMoves(
 let pack = null;
 function packParse(text){
   let j; try { j = JSON.parse(String(text || "").trim()); } catch (e) { return { err: "読めませんでした(形式が崩れています):" + e.message }; }
-  const moves = (j.moves || []).filter(m => m && m.name && Array.isArray(m.frames) && m.frames.length).map(m => ({
+  const okV3 = f => f && Array.isArray(f.r) && f.d && ["M", "S", "H", "L1", "E1", "W1", "L2", "E2", "W2", "Q1", "K1", "A1", "T1", "Q2", "K2", "A2", "T2"].every(k => Array.isArray(f.d[k]) && f.d[k].length === 3);
+  const moves = (j.moves || []).filter(m => m && m.name && Array.isArray(m.frames) && m.frames.length).map(m => m.v3 ? ({
+    name: String(m.name), v3: true, sec: +m.sec > 0 ? +m.sec : 3, hold: !!m.hold, plant: m.plant && typeof m.plant === "object" ? m.plant : { mode: "lowest" },
+    cam: camOf(m.cam), frames: m.frames.filter(okV3).map(f => ({ r: f.r.slice(0, 3), lift: +f.lift || 0, d: Object.fromEntries(Object.entries(f.d).map(([k, v]) => [k, v3.norm(v)])) })),
+    ...(m.pins ? { pins: m.pins } : {}), ...(Array.isArray(m.props) ? { props: m.props } : {}), ...(m.note ? { note: String(m.note) } : {}) }) : ({
     name: String(m.name), view: m.view === "front" ? "front" : "side", sec: +m.sec > 0 ? +m.sec : 3, hold: !!m.hold, plant: m.plant && typeof m.plant === "object" ? m.plant : {},
     frames: m.frames.map(f => P_(f || {})), ...(m.note ? { note: String(m.note) } : {}) }));
   const menus = (j.menus || []).filter(mn => mn && mn.name && Array.isArray(mn.items)).map(mn => ({ name: String(mn.name), items: mn.items.map(it => ({
     move: String(it.move || ""), mode: it.mode === "sec" ? "sec" : "reps", value: +it.value > 0 ? +it.value : (it.mode === "sec" ? 30 : 10), sets: Math.max(1, +it.sets || 1), rest: Math.max(0, +it.rest || 0) })) }));
+  const bad = moves.filter(m => !m.frames.length).map(m => m.name);
+  if (bad.length) return { err: "形のデータが読めない動作があります:" + bad.join("、") };
   if (!moves.length && !menus.length) return { err: "動作もメニューも入っていません" };
   const known = new Set(allMoves().map(m => m.name).concat(moves.map(m => m.name)));
   const missing = [...new Set(menus.flatMap(mn => mn.items.map(it => it.move)).filter(n => !known.has(n)))];
@@ -691,7 +697,7 @@ async function packApply(){
   const pk = pack; if (!pk || pk.err) return;
   await commit(doc => {
     pk.moves.forEach(m => { const ex = doc.moves.find(x => !x.deleted && x.name === m.name);
-      const m3 = to3D(clone(m));   // 自分の動作は立体の形で持つので、読み込むときに読み替える
+      const m3 = m.v3 ? clone(m) : to3D(clone(m));   // 自分の動作は立体の形で持つので、平面の形なら読み替える
       if (ex) { Object.keys(ex).forEach(k => { if (k !== "id") delete ex[k]; }); Object.assign(ex, m3, { id: ex.id }); }
       else doc.moves.push(Object.assign({}, m3, { id: "u:" + uid() })); });
     const byNameMove = n => { const u = doc.moves.find(x => !x.deleted && x.name === n); if (u) return u.id; const b = BUILTIN.find(x => x.name === n); return b ? b.id : null; };
