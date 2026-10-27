@@ -107,7 +107,7 @@ nav.tabs button[aria-selected="true"]{color:var(--ink);box-shadow:inset 0 3px 0 
 <script>
 (function(){
 "use strict";
-const APP_VERSION = "2026-10-27 r11";
+const APP_VERSION = "2026-10-27 r12";
 const DATA = "roadmap/apps/tanren/data.json";
 const KEY_CONN = "tn-conn", KEY_CACHE = "tn-cache", KEY_VOICE = "tn-voice";
 const state = { conn: null, doc: null, sha: null, view: "menus", editMenu: null, picker: false, editMove: null, frame: 0, preview: true, play: null };
@@ -594,7 +594,7 @@ function tickPlayer(){
   const pl = state.play; if (!pl || pl.done) return;
   const seg = pl.segs[pl.i], t = elapsed(), m = moveOf((seg.kind === "move" ? seg.it : seg.next).move);
   const fig = document.getElementById("pl-stage");
-  if (fig) fig.innerHTML = figureSvg(seg.kind === "move" ? (m.hold ? poseAt(m, 0) : poseAtSec(m, t, m.noReturn && seg.it.mode !== "reps")) : poseAtSec(m, t / 1.6), m.cam, { id: "pl-fig", props: m.props, fit: m.__fit || (m.__fit = fitOf(m)), bands: m.bands, bandRest: bandRest(m) });
+  if (fig) fig.innerHTML = figureSvg(seg.kind === "move" ? (m.hold ? (m.frames.length > 1 ? poseAtSec(m, t, true) : poseAt(m, 0)) : poseAtSec(m, t, m.noReturn && seg.it.mode !== "reps")) : poseAtSec(m, t / 1.6), m.cam, { id: "pl-fig", props: m.props, fit: m.__fit || (m.__fit = fitOf(m)), bands: m.bands, bandRest: bandRest(m) });
   const left = seg.dur - t, big = document.getElementById("pl-big"), sub = document.getElementById("pl-sub"), bar = document.getElementById("pl-bar");
   if (seg.kind === "move" && seg.it.mode === "reps") {
     const done = Math.min(seg.it.value, Math.floor(t / cycleSec(m))), rem = seg.it.value - done;
@@ -618,7 +618,7 @@ function loop(){ if (!state.play || state.play.done) return; tickPlayer(); state
 
 /* ───────── 動作を作る画面のアニメーションとドラッグ ───────── */
 function previewLoop(ts){
-  if (state.editMove && state.preview && state.view === "moves") { const st = document.getElementById("mv-stage"), m = state.editMove; if (st) st.innerHTML = figureSvg(poseAtSec(m, nowMs() / 1000), m.cam, { id: "mv-fig", props: m.props, bands: m.bands, bandRest: bandRest(m) }); }
+  if (state.editMove && state.preview && state.view === "moves") { const st = document.getElementById("mv-stage"), m = state.editMove; if (st) st.innerHTML = figureSvg(m.noReturn && m.frames.length > 1 ? poseAtSec(m, (nowMs() / 1000) % (cycleSec(m) + 3), true) : poseAtSec(m, nowMs() / 1000), m.cam, { id: "mv-fig", props: m.props, bands: m.bands, bandRest: bandRest(m) }); }
   requestAnimationFrame(previewLoop);
 }
 function svgPoint(svg, ev){ const pt = svg.createSVGPoint ? svg.createSVGPoint() : { x: 0, y: 0 }; pt.x = ev.clientX; pt.y = ev.clientY; const m = svg.getScreenCTM && svg.getScreenCTM(); const r = m && pt.matrixTransform ? pt.matrixTransform(m.inverse()) : pt; return [r.x, r.y]; }
@@ -673,9 +673,9 @@ function packParse(text){
   const moves = (j.moves || []).filter(m => m && m.name && Array.isArray(m.frames) && m.frames.length).map(m => m.v3 ? ({
     name: String(m.name), v3: true, sec: +m.sec > 0 ? +m.sec : 3, hold: !!m.hold, plant: m.plant && typeof m.plant === "object" ? m.plant : { mode: "lowest" },
     cam: camOf(m.cam), frames: m.frames.filter(okV3).map(f => ({ r: f.r.slice(0, 3), lift: +f.lift || 0, d: Object.fromEntries(Object.entries(f.d).map(([k, v]) => [k, v3.norm(v)])) })),
-    ...(m.pins ? { pins: m.pins } : {}), ...(Array.isArray(m.props) ? { props: m.props } : {}), ...(m.note ? { note: String(m.note) } : {}) }) : ({
+    ...(m.noReturn ? { noReturn: true } : {}), ...(Array.isArray(m.trans) ? { trans: m.trans.map(Number) } : {}), ...(Array.isArray(m.holds) ? { holds: m.holds.map(Number) } : {}), ...(m.pins ? { pins: m.pins } : {}), ...(Array.isArray(m.props) ? { props: m.props } : {}), ...(m.note ? { note: String(m.note) } : {}) }) : ({
     name: String(m.name), view: m.view === "front" ? "front" : "side", sec: +m.sec > 0 ? +m.sec : 3, hold: !!m.hold, plant: m.plant && typeof m.plant === "object" ? m.plant : {},
-    frames: m.frames.map(f => P_(f || {})), ...(m.note ? { note: String(m.note) } : {}) }));
+    frames: m.frames.map(f => P_(f || {})), ...(m.noReturn ? { noReturn: true } : {}), ...(Array.isArray(m.trans) ? { trans: m.trans.map(Number) } : {}), ...(Array.isArray(m.holds) ? { holds: m.holds.map(Number) } : {}), ...(m.note ? { note: String(m.note) } : {}) }));
   const menus = (j.menus || []).filter(mn => mn && mn.name && Array.isArray(mn.items)).map(mn => ({ name: String(mn.name), items: mn.items.map(it => ({
     move: String(it.move || ""), mode: it.mode === "sec" ? "sec" : "reps", value: +it.value > 0 ? +it.value : (it.mode === "sec" ? 30 : 10), sets: Math.max(1, +it.sets || 1), rest: Math.max(0, +it.rest || 0) })) }));
   const bad = moves.filter(m => !m.frames.length).map(m => m.name);
