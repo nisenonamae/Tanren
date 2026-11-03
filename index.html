@@ -69,6 +69,18 @@ h1{font-size:1.2rem;margin:0 0 .8rem;letter-spacing:.1em}
 nav.tabs{position:fixed;left:0;right:0;bottom:0;background:#FBF9F4;border-top:1px solid var(--rule);display:flex;padding-bottom:env(safe-area-inset-bottom)}
 nav.tabs button{flex:1;border:none;background:none;padding:.8rem 0;cursor:pointer;color:var(--sub);font-weight:700}
 nav.tabs button[aria-selected="true"]{color:var(--ink);box-shadow:inset 0 3px 0 var(--ink)}
+
+/* スクショの動作 */
+.imfig{display:block;position:relative;aspect-ratio:4/3;background:#FBFAF6;border:1px solid var(--rule);border-radius:10px;overflow:hidden}
+.imfig img{width:100%;height:100%;object-fit:contain;display:block}.imfig i{position:absolute;right:.3rem;bottom:.3rem;font-style:normal;font-size:.66rem;background:var(--ink);color:#fff;border-radius:3px;padding:0 .3rem}
+img.missing{opacity:.25}
+.imgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(8.5rem,1fr));gap:.5rem;margin-bottom:.6rem}
+.imcell{border:1px solid var(--rule);border-radius:8px;background:#fff;overflow:hidden}.imcell img{width:100%;aspect-ratio:4/3;object-fit:contain;display:block;background:#FBFAF6}
+.imbar{display:flex;align-items:center;gap:.25rem;padding:.25rem .3rem}.imbar b{flex:1;font-size:.8rem}
+.imbar button{border:1px solid var(--rule);background:#fff;border-radius:4px;width:2rem;height:1.9rem;padding:0}.imbar button:disabled{opacity:.3}.imbar .rm{color:#B3283C}
+.imadd{border:2px dashed var(--rule);border-radius:10px;padding:.6rem .7rem;text-align:center;color:var(--sub);font-size:.82rem}.imadd:focus{outline:none;border-color:var(--acc)}.imadd p{margin:0 0 .4rem}.imadd .row{justify-content:center}
+.imprev{background:#FBFAF6;border:1px solid var(--rule);border-radius:10px;overflow:hidden}.imprev img{width:100%;max-height:55vh;object-fit:contain;display:block}
+.player .stage .plimg{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px}
 </style>
 </head>
 <body>
@@ -107,7 +119,7 @@ nav.tabs button[aria-selected="true"]{color:var(--ink);box-shadow:inset 0 3px 0 
 <script>
 (function(){
 "use strict";
-const APP_VERSION = "2026-10-27 r12";
+const APP_VERSION = "2026-11-03 r13";
 const DATA = "roadmap/apps/tanren/data.json";
 const KEY_CONN = "tn-conn", KEY_CACHE = "tn-cache", KEY_VOICE = "tn-voice";
 const state = { conn: null, doc: null, sha: null, view: "menus", editMenu: null, picker: false, editMove: null, frame: 0, preview: true, play: null };
@@ -314,6 +326,7 @@ function lerpPose(a, b, k){
 }
 // ポーズごとの時間:次のポーズまでの秒(trans)と、そのポーズで止める秒(holds)。無ければ「1回の秒」を均等に割る
 function timing(m){
+  if (m.kind === "img") { const n = Math.max(1, (m.imgs || []).length), per = +m.per || 1.5; return { tr: Array(n).fill(per), ho: Array(n).fill(0), total: n * per }; }
   const n = m.frames.length, sec = +m.sec || 2;
   const tr = m.frames.map((f, i) => (m.trans && m.trans[i] != null && m.trans[i] !== "") ? Math.max(0.1, +m.trans[i]) : sec / n);
   const ho = m.frames.map((f, i) => Math.max(0, +((m.holds || [])[i] || 0)));
@@ -411,7 +424,7 @@ const CLAM = (() => {
 })();
 const BUILTIN = BUILTIN2D.map(to3D).concat([CLAM]);
 const D = () => state.doc;
-const allMoves = () => BUILTIN.concat((D() ? D().moves : []).filter(m => !m.deleted).map(to3D));
+const allMoves = () => BUILTIN.concat((D() ? D().moves : []).filter(m => !m.deleted).map(m => m.kind === "img" ? m : to3D(m)));
 const moveOf = id => allMoves().find(m => m.id === id);
 /* ───── GitHub ───── */
 function b64e(str){ const b = new TextEncoder().encode(str); let s = ""; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); }
@@ -439,7 +452,7 @@ async function writeJson(path, obj, sha, msg){
 }
 async function load(){
   if (!state.conn || !state.conn.token) return false;
-  try { const r = await readJson(DATA); state.doc = Object.assign(emptyDoc(), r.data || {}); state.sha = r.sha; lsSet(KEY_CACHE, { doc: state.doc, sha: state.sha }); render(); return true; }
+  try { const r = await readJson(DATA); state.doc = Object.assign(emptyDoc(), r.data || {}); state.sha = r.sha; lsSet(KEY_CACHE, { doc: state.doc, sha: state.sha }); render(); flushUploads(); return true; }
   catch (e) { say(e.message, true); return false; }
 }
 async function commit(mutate){
@@ -462,7 +475,7 @@ function speak(text){
 const fmt = sec => { sec = Math.max(0, Math.round(sec)); return Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0"); };
 const itemSec = it => { const m = moveOf(it.move); return m ? (it.mode === "reps" ? it.value * cycleSec(m) : it.value) : 0; };
 const menuSec = mn => mn.items.reduce((a, it, i) => a + itemSec(it) * it.sets + (it.rest || 0) * (it.sets - (i === mn.items.length - 1 ? 1 : 0)), 0);
-const mini = (m, cls) => { const p = poseAt(m, 0.25); return figureSvg(p, m.cam, { props: m.props, fit: fitOf(m), bands: m.bands, bandRest: bandRest(m) }).replace('class="fig"', 'class="fig' + (cls ? " " + cls : "") + '"'); };
+const mini = (m, cls) => { if (m.kind === "img") return imgThumb(m, cls); const p = poseAt(m, 0.25); return figureSvg(p, m.cam, { props: m.props, fit: fitOf(m), bands: m.bands, bandRest: bandRest(m) }).replace('class="fig"', 'class="fig' + (cls ? " " + cls : "") + '"'); };
 function renderMenus(){
   const box = document.getElementById("menus");
   if (state.editMenu) { box.innerHTML = menuEditorHtml(state.editMenu); return; }
@@ -493,13 +506,86 @@ function readMenu(mn){
   document.querySelectorAll("[data-it]").forEach(el => { const it = mn.items[+el.dataset.i]; if (!it) return; const k = el.dataset.it; it[k] = k === "mode" ? el.value : Math.max(k === "rest" ? 0 : 1, +el.value || 0); });
 }
 
+
+/* ───────── スクショの動作 ─────────
+   動作 { id, kind: "img", name, imgs: [画像の名札], per: 1枚を見せる秒数, note }
+   画像は1枚ずつ、スマホの中(IndexedDB)と notion-daily の roadmap/apps/tanren/img/ に置く(data.json には名札だけ) */
+const IMG_DIR = "roadmap/apps/tanren/img/", UPQ = "tn-imgq";
+const imgURL = {}, imgWait = {};
+function idb(){ return new Promise((res, rej) => { const r = indexedDB.open("tanren-img", 1); r.onupgradeneeded = () => r.result.createObjectStore("img"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
+async function idbGet(id){ try { const db = await idb(); return await new Promise(res => { const q = db.transaction("img").objectStore("img").get(id); q.onsuccess = () => res(q.result || null); q.onerror = () => res(null); }); } catch (e) { return null; } }
+async function idbPut(id, blob){ try { const db = await idb(); await new Promise(res => { const tx = db.transaction("img", "readwrite"); tx.objectStore("img").put(blob, id); tx.oncomplete = res; tx.onerror = res; }); } catch (e) {} }
+function getImg(id){
+  if (!id) return Promise.resolve(""); if (imgURL[id]) return Promise.resolve(imgURL[id]); if (imgWait[id]) return imgWait[id];
+  return imgWait[id] = (async () => { let b = await idbGet(id);
+    if (!b && state.conn && state.conn.token) { try { const r = await fetchRetry(repo() + "/contents/" + IMG_DIR + id + ".jpg?ref=" + encodeURIComponent(state.conn.branch), { headers: hdr({ "Accept": "application/vnd.github.raw+json" }), cache: "no-store" }); if (r.ok) { b = await r.blob(); await idbPut(id, b); } } catch (e) {} }
+    delete imgWait[id]; return b ? (imgURL[id] = URL.createObjectURL(b)) : ""; })();
+}
+function fillImgs(root){ (root || document).querySelectorAll("img[data-tnimg]").forEach(el => { const id = el.dataset.tnimg; if (!id || el.dataset.tnsrc === id) return; el.dataset.tnsrc = id;
+  getImg(id).then(u => { if (el.dataset.tnimg !== id) return; if (u) { el.src = u; el.classList.remove("missing"); } else el.classList.add("missing"); }); }); }
+let fillQueued = false; new MutationObserver(() => { if (fillQueued) return; fillQueued = true; requestAnimationFrame(() => { fillQueued = false; fillImgs(); }); }).observe(document.documentElement, { childList: true, subtree: true });
+/* 縮めてから持つ(長い辺 960px・JPEG) */
+async function shrink(file){ const bmp = await createImageBitmap(file); const k = Math.min(1, 960 / Math.max(bmp.width, bmp.height)), c = document.createElement("canvas"); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height); return await new Promise(res => c.toBlob(b => res(b), "image/jpeg", 0.8)); }
+const upq = () => lsGet(UPQ, []), setUpq = a => lsSet(UPQ, a);
+async function uploadImg(id, blob){
+  if (!state.conn || !state.conn.token) { if (!upq().includes(id)) setUpq(upq().concat(id)); return false; }
+  try { const buf = new Uint8Array(await blob.arrayBuffer()); let bin = ""; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+    const r = await fetchRetry(repo() + "/contents/" + IMG_DIR + id + ".jpg", { method: "PUT", headers: hdr({ "Content-Type": "application/json" }), body: JSON.stringify({ message: "鍛錬の画像を足す", content: btoa(bin), branch: state.conn.branch }) });
+    if (!r.ok && r.status !== 422) throw new Error(String(r.status)); setUpq(upq().filter(x => x !== id)); return true;
+  } catch (e) { if (!upq().includes(id)) setUpq(upq().concat(id)); return false; } }
+async function flushUploads(){ for (const id of upq()) { const b = await idbGet(id); if (b) await uploadImg(id, b); else setUpq(upq().filter(x => x !== id)); } }
+async function addImages(files){ const m = state.editMove; if (!m || m.kind !== "img") return; let n = 0;
+  readImg(m); say("取り込み中…");
+  for (const f of files) { if (!f || !/^image\//.test(f.type || "")) continue; try { const b = await shrink(f), id = "i" + uid(); await idbPut(id, b); imgURL[id] = URL.createObjectURL(b); m.imgs.push(id); uploadImg(id, b); n++; } catch (e) {} }
+  say(n ? n + "枚足しました" : "画像が見つかりませんでした。", !n); renderMoves(); }
+const imgThumb = (m, cls) => '<span class="imfig' + (cls ? " " + cls : "") + '"><img data-tnimg="' + esc((m.imgs || [])[0] || "") + '" alt="">' + ((m.imgs || []).length > 1 ? '<i>' + m.imgs.length + "枚</i>" : "") + "</span>";
+const imgStageHtml = m => '<img id="pl-img" class="plimg" data-tnimg="' + esc((m.imgs || [])[0] || "") + '" alt="' + esc(m.name) + '">';
+function imgTick(m, seg, t){ const n = (m.imgs || []).length; if (!n) return; const per = +m.per || 1.5, x = seg.kind === "move" ? t : t / 1.6, i = Math.floor(x / per) % n, id = m.imgs[i], el = document.getElementById("pl-img");
+  if (!el || el.dataset.tnimg === id) return; el.dataset.tnimg = id; if (imgURL[id]) el.src = imgURL[id]; else getImg(id).then(u => { if (u && el.dataset.tnimg === id) el.src = u; }); }
+function readImg(m){ const v = id => document.getElementById(id); if (v("im-name")) m.name = v("im-name").value.trim(); if (v("im-per")) m.per = Math.max(0.3, +v("im-per").value || 1.5); if (v("im-note")) m.note = v("im-note").value; }
+function imgEditorHtml(m){
+  const saved = (D().moves || []).some(x => x.id === m.id && !x.deleted), per = +m.per || 1.5;
+  return "<h1>" + (saved ? "スクショの動作を直す" : "スクショで動作を作る") + "</h1>" +
+    '<div class="f"><label>名前</label><input id="im-name" value="' + esc(m.name) + '" placeholder="例:動画の3つ目のストレッチ"></div>' +
+    '<div class="panel"><div class="panel-h"><span>スクショ(並んだ順に切り替わる)</span><span class="status">' + m.imgs.length + "枚</span></div><div class=\"panel-b\">" +
+    (m.imgs.length ? '<div class="imgrid">' + m.imgs.map((id, i) => '<div class="imcell"><img data-tnimg="' + esc(id) + '" alt="' + (i + 1) + '枚目"><div class="imbar"><b>' + (i + 1) + '</b><button type="button" data-imup="' + i + '" aria-label="前へ"' + (i ? "" : " disabled") + '>◀</button><button type="button" data-imdn="' + i + '" aria-label="後ろへ"' + (i < m.imgs.length - 1 ? "" : " disabled") + '>▶</button><button type="button" class="rm" data-imrm="' + i + '" aria-label="消す">×</button></div></div>').join("") + "</div>"
+      : '<div class="empty">まだありません。下から足してください。</div>') +
+    '<div class="imadd" id="im-drop" tabindex="0"><p>スクショをここに貼り付け(長押しして貼り付け・Ctrl+V)、または下のボタンから</p><div class="row"><button type="button" class="btn sm" data-impaste>コピーしたものを貼る</button><label class="btn ghost sm" style="cursor:pointer">写真から選ぶ<input type="file" id="im-file" accept="image/*" multiple hidden></label></div></div></div></div>' +
+    '<div class="f"><label>1枚を見せる秒数</label><input id="im-per" type="number" min="0.3" step="0.1" inputmode="decimal" value="' + per + '">' +
+    '<p class="empty" style="font-size:.76rem;margin:.25rem 0 0;text-align:left">全部のスクショをひと回りで「1回」と数える(今は1回 ' + (Math.round(per * Math.max(1, m.imgs.length) * 10) / 10) + "秒)。1枚だけなら、その形をずっと見せる。</p></div>" +
+    '<div class="f"><label>メモ(動画の名前や場所など)</label><textarea id="im-note" rows="2">' + esc(m.note || "") + "</textarea></div>" +
+    (m.imgs.length > 1 ? '<div class="panel"><div class="panel-h"><span>試しに見る</span></div><div class="panel-b"><div class="imprev"><img id="im-prev" data-tnimg="' + esc(m.imgs[0]) + '" alt=""></div></div></div>' : "") +
+    '<div class="row"><button type="button" class="btn" data-imsave>保存</button><button type="button" class="btn ghost" data-imclose>やめる</button></div>' +
+    (saved ? '<div style="margin-top:.6rem"><button type="button" class="linkbtn" data-imdel style="color:#B3283C">この動作を消す</button></div>' : "");
+}
+async function imgClick(e, m){ const q = s => e.target.closest(s); let b; readImg(m);
+  if (q("[data-imclose]")) { state.editMove = null; return renderMoves(); }
+  if ((b = q("[data-imup]"))) { const i = +b.dataset.imup; if (i > 0) [m.imgs[i - 1], m.imgs[i]] = [m.imgs[i], m.imgs[i - 1]]; return renderMoves(); }
+  if ((b = q("[data-imdn]"))) { const i = +b.dataset.imdn; if (i < m.imgs.length - 1) [m.imgs[i + 1], m.imgs[i]] = [m.imgs[i], m.imgs[i + 1]]; return renderMoves(); }
+  if ((b = q("[data-imrm]"))) { const i = +b.dataset.imrm; const gone = m.imgs.splice(i, 1)[0]; state.imUndo = { id: gone, i }; renderMoves(); say((i + 1) + "枚目を外しました(保存するまでは「やめる」で戻せます)"); return; }
+  if (q("[data-impaste]")) { try { const items = await navigator.clipboard.read(), fs = [];
+      for (const it of items) { const t = it.types.find(x => x.startsWith("image/")); if (t) fs.push(new File([await it.getType(t)], "paste", { type: t })); }
+      if (!fs.length) return say("コピーしたものの中に画像がありません。", true); return addImages(fs); }
+    catch (err) { return say("ここでは貼り付けられませんでした。「写真から選ぶ」を使ってください。", true); } }
+  if (q("[data-imsave]")) { if (!m.name) return say("名前を入れてください。", true); if (!m.imgs.length) return say("スクショを1枚以上足してください。", true);
+    const mv = clone(m); state.editMove = null; say("保存しました"); return commit(doc => { const i = doc.moves.findIndex(x => x.id === mv.id); if (i >= 0) doc.moves[i] = mv; else doc.moves.push(mv); }); }
+  if (q("[data-imdel]")) { if (!confirm("この動作を消しますか。")) return; const id = m.id; state.editMove = null; return commit(doc => { const x = doc.moves.find(y => y.id === id); if (x) x.deleted = today(); }); }
+}
+document.addEventListener("change", e => { if (e.target.id === "im-file" && e.target.files && e.target.files.length) { const fs = Array.from(e.target.files); e.target.value = ""; addImages(fs); } });
+document.addEventListener("paste", e => { const m = state.editMove; if (!m || m.kind !== "img") return; const fs = Array.from((e.clipboardData && e.clipboardData.items) || []).filter(x => x.kind === "file" && /^image\//.test(x.type)).map(x => x.getAsFile()).filter(Boolean);
+  if (fs.length) { e.preventDefault(); addImages(fs); } });
+/* 試しに見る:並んだ順に切り替える */
+setInterval(() => { const el = document.getElementById("im-prev"), m = state.editMove; if (!el || !m || m.kind !== "img" || m.imgs.length < 2) return; const per = +m.per || 1.5; const now = Date.now() / 1000, i = Math.floor(now / per) % m.imgs.length, id = m.imgs[i];
+  if (el.dataset.tnimg !== id) { el.dataset.tnimg = id; if (imgURL[id]) el.src = imgURL[id]; else getImg(id).then(u => { if (u && el.dataset.tnimg === id) el.src = u; }); } }, 150);
+
 /* ───────── 動作:用意したもの・自分で作るもの ───────── */
 function renderMoves(){
   const box = document.getElementById("moves");
-  if (state.editMove) { box.innerHTML = moveEditorHtml(state.editMove); return; }
+  if (state.editMove) { box.innerHTML = state.editMove.kind === "img" ? imgEditorHtml(state.editMove) : moveEditorHtml(state.editMove); return; }
   const mine = (D() ? D().moves : []).filter(m => !m.deleted);
   const card = m => '<button type="button" class="mcard" data-mopen="' + esc(m.id) + '">' + mini(m) + "<b>" + esc(m.name) + "</b><small>1回 " + (Math.round(cycleSec(m) * 10) / 10) + "秒" + (m.id.startsWith("c:") ? "・押して直す" : "") + "</small></button>";
-  box.innerHTML = "<h1>動作</h1>" + '<div class="panel"><div class="panel-h"><span>自分で作った動作</span><button type="button" class="linkbtn" data-mvnew>+ 新しく作る</button></div><div class="panel-b">' +
+  box.innerHTML = "<h1>動作</h1>" + '<div class="panel"><div class="panel-h"><span>自分で作った動作</span><span><button type="button" class="linkbtn" data-mvimgnew>+ スクショで作る</button>  <button type="button" class="linkbtn" data-mvnew>+ 人形で作る</button></span></div><div class="panel-b">' +
     (mine.length ? '<div class="mlist">' + mine.map(card).join("") + "</div>" : '<div class="empty">まだありません。用意した動作を押して「これをもとに作る」からも作れます。</div>') + "</div></div>" +
     '<div class="panel"><div class="panel-h"><span>用意した動作</span></div><div class="panel-b"><div class="mlist">' + BUILTIN.map(card).join("") + "</div></div></div>";
 }
@@ -562,7 +648,7 @@ function startPlay(mn){
   const segs = buildSegs(mn); if (!segs.length) return say("このメニューには動作がありません。", true);
   state.play = { mn, segs, i: 0, start: nowMs(), paused: null, total: segs.reduce((a, x) => a + x.dur, 0), said: {} };
   try { if (navigator.wakeLock) navigator.wakeLock.request("screen").then(l => { state.play && (state.play.lock = l); }).catch(() => {}); } catch (e) {}
-  document.getElementById("player").hidden = false; enterSeg(); loop();
+  document.getElementById("player").hidden = false; segs.forEach(x => { const mv = moveOf((x.kind === "move" ? x.it : x.next).move); if (mv && mv.kind === "img") mv.imgs.forEach(getImg); }); enterSeg(); loop();
 }
 function segName(seg){ const m = moveOf((seg.kind === "move" ? seg.it : seg.next).move); return m ? m.name : ""; }
 function enterSeg(){
@@ -583,7 +669,7 @@ function renderPlayer(){
   el.className = "player" + (seg.kind !== "move" ? " rest" : "");
   const nxt = pl.segs.slice(pl.i + 1).find(x => x.kind === "move");
   el.innerHTML = '<div class="top"><span>' + esc(pl.mn.name) + "</span><span>" + (pl.i + 1) + " / " + pl.segs.length + "</span></div>" +
-    '<div class="stage" id="pl-stage">' + figureSvg(poseAt(m, 0), m.cam, { id: "pl-fig", props: m.props, fit: fitOf(m), bands: m.bands, bandRest: bandRest(m) }) + "</div>" +
+    '<div class="stage" id="pl-stage">' + (m.kind === "img" ? imgStageHtml(m) : figureSvg(poseAt(m, 0), m.cam, { id: "pl-fig", props: m.props, fit: fitOf(m), bands: m.bands, bandRest: bandRest(m) })) + "</div>" +
     '<div class="now"><div class="nm">' + (seg.kind === "prep" ? "準備" : seg.kind === "rest" ? "休憩" : esc(m.name)) + "</div>" +
     '<div class="big" id="pl-big"></div><div class="sub2" id="pl-sub"></div><div class="bar"><i id="pl-bar" style="width:0%"></i></div>' +
     '<div class="sub2">' + (seg.kind === "move" ? (nxt ? "次:" + esc(segName(nxt)) : "これで最後") : "次:" + esc(m.name) + (seg.kind === "rest" && seg.nextSet > 1 ? "(" + seg.nextSet + "セット目)" : "")) + "</div></div>" +
@@ -594,7 +680,8 @@ function tickPlayer(){
   const pl = state.play; if (!pl || pl.done) return;
   const seg = pl.segs[pl.i], t = elapsed(), m = moveOf((seg.kind === "move" ? seg.it : seg.next).move);
   const fig = document.getElementById("pl-stage");
-  if (fig) fig.innerHTML = figureSvg(seg.kind === "move" ? (m.hold ? (m.frames.length > 1 ? poseAtSec(m, t, true) : poseAt(m, 0)) : poseAtSec(m, t, m.noReturn && seg.it.mode !== "reps")) : poseAtSec(m, t / 1.6), m.cam, { id: "pl-fig", props: m.props, fit: m.__fit || (m.__fit = fitOf(m)), bands: m.bands, bandRest: bandRest(m) });
+  if (fig && m.kind === "img") imgTick(m, seg, t);
+  else if (fig) fig.innerHTML = figureSvg(seg.kind === "move" ? (m.hold ? (m.frames.length > 1 ? poseAtSec(m, t, true) : poseAt(m, 0)) : poseAtSec(m, t, m.noReturn && seg.it.mode !== "reps")) : poseAtSec(m, t / 1.6), m.cam, { id: "pl-fig", props: m.props, fit: m.__fit || (m.__fit = fitOf(m)), bands: m.bands, bandRest: bandRest(m) });
   const left = seg.dur - t, big = document.getElementById("pl-big"), sub = document.getElementById("pl-sub"), bar = document.getElementById("pl-bar");
   if (seg.kind === "move" && seg.it.mode === "reps") {
     const done = Math.min(seg.it.value, Math.floor(t / cycleSec(m))), rem = seg.it.value - done;
@@ -759,8 +846,10 @@ function bind(){
     if ((b = q("[data-mopen]"))) { const id = b.dataset.mopen; state.editMove = clone(moveOf(id)); state.frame = 0; state.pinMode = false;
       state.preview = id.startsWith("b:");            // 用意した動作は通して見せる。自分の動作は、すぐ直せる状態で開く
       return renderMoves(); }
+    if (q("[data-mvimgnew]")) { state.editMove = { id: "c:" + uid(), kind: "img", name: "", imgs: [], per: 1.5, note: "" }; return renderMoves(); }
     if (q("[data-mvnew]")) { state.editMove = { id: "c:" + uid(), name: "", v3: true, cam: { yaw: 0, pitch: 0 }, sec: 2.5, plant: {}, frames: [standPose(false), standPose(true)] }; state.editMove.cam = { yaw: -50, pitch: 12 }; state.frame = 0; state.preview = false; return renderMoves(); }
     const m = state.editMove; if (!m) return;
+    if (m.kind === "img") return imgClick(e, m);
     readMove(m);
     if (q("[data-mvclose]")) { state.editMove = null; return renderMoves(); }
     if (q("[data-mvcopy]")) { const c = clone(m); c.id = "c:" + uid(); c.name = m.name + "(自分用)"; delete c.hold; state.editMove = c; state.frame = 0; state.preview = false; return renderMoves(); }
@@ -839,6 +928,7 @@ function boot(){
 }
 window.__tn = { bandRest, anchorPos, timing, cycleSec, poseAtSec, fitOf, figureSvg, state, BUILTIN, poseAt, plant, place, joints, togglePin, toCam, fromCam, v3, buildSegs, tickPlayer, goSeg, menuSec, dragTo };
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
+window.__tnT = { state, commit, startPlay, goSeg, cycleSec, renderPlayer };   // 確かめる用
 })();
 </script>
 </body>
